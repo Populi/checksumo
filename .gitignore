@@ -1,0 +1,8 @@
+.vscode
+scratchpad*
+spec/reports/
+logs/
+*.log
+*.log.age
+
+

@@ -1,0 +1,11 @@
+# Customized defaults for checksumo
+defaults:
+  master_hostname: "127.0.0.1"
+  master_port: 3060
+  replica_hostname: "127.0.0.1"
+  replica_port: 3070
+  verbose: info
+  watch_mode: CHUNK_SUMMARY
+  wait_interval: 5
+  timeout: 15
+  log_dir: "logs/"
