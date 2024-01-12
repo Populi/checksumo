@@ -2,6 +2,7 @@ require "mysql2"
 require "logging"
 require "memoist"
 
+require_relative "executor"
 require_relative "log_helper"
 
 # Checksum Result
@@ -56,6 +57,7 @@ end
 # Encapsulate MySQL connection
 class MysqlConnection
   extend Memoist
+  include LogHelper
 
   attr_accessor :table_cache, :table_names, :primary_key_cache
 
@@ -76,8 +78,9 @@ class MysqlConnection
     end
 
     @logger = opts.fetch(:logger) do
-      LogHelper.logger(name: "#{self.class}")
+      logger()
     end
+    @executor = Executor.new(logger: @logger)
   end
 
   # Add table names to check.
@@ -97,8 +100,10 @@ class MysqlConnection
       GROUP BY t.table_name;
     QUERY
 
-    @client.query(query).each do |row|
-      @primary_key_cache[row["TableName"]] = row["PrimaryKey"] unless row["PrimaryKey"].match(",")
+    @executor.execute do
+      @client.query(query).each do |row|
+        @primary_key_cache[row["TableName"]] = row["PrimaryKey"] unless row["PrimaryKey"].match(",")
+      end
     end
 
     @primary_key_cache
@@ -106,7 +111,7 @@ class MysqlConnection
 
   def columns(table_name)
     query = %(SELECT * FROM #{table_name} LIMIT 1;)
-    result = @client.query(query)
+    result = @executor.execute { @client.query(query) }
     result.fields.sort
   end
 
@@ -115,7 +120,7 @@ class MysqlConnection
   def primary_key(table_name, _opts = {})
     @primary_key_cache.fetch(table_name) do |name|
       statement = primary_key_query
-      result_set = statement.execute(name)
+      result_set = @executor.execute { statement.execute(name) }
       cols = result_set.map do |row|
         row["COLUMN_NAME"]
       end
@@ -128,10 +133,11 @@ class MysqlConnection
   def max_row_id(table_name)
     primary_key = primary_key(table_name)
     query = %{SELECT COALESCE(max(#{primary_key}), "") as max from #{table_name};}
-    maxes = @client.query(query).map do |row|
-      row["max"]
+    maxes = @executor.execute do
+      @client.query(query).map do |row|
+        row["max"]
+      end
     end
-
     maxes.first
   end
 
@@ -140,10 +146,11 @@ class MysqlConnection
   def min_row_id(table_name)
     primary_key = primary_key(table_name)
     query = %{SELECT COALESCE(min(#{primary_key}), "") as min from #{table_name};}
-    maxes = @client.query(query).map do |row|
-      row["min"]
+    maxes = @executor.execute do
+      @client.query(query).map do |row|
+        row["min"]
+      end
     end
-
     maxes.first
   end
 
@@ -154,11 +161,11 @@ class MysqlConnection
     primary_key = primary_key(table_name)
     statement = row_checksum_query(table_name)
     if !row_id.nil?
-      result = statement.execute(row_id, row_id)
+      result = @executor.execute { statement.execute(row_id, row_id) }
     else
       min = opts.fetch(:min) { min_row_id(table_name) }
       max = opts.fetch(:max) { max_row_id(table_name) }
-      result = statement.execute(min, max)
+      result = @executor.execute { statement.execute(min, max) }
     end
     result.map do |row|
       RowChecksum.new(table_name: table_name, row_id: row["ROW_ID"], crc32: row["CHECKSUM"], primary_key: primary_key)
@@ -190,15 +197,17 @@ class MysqlConnection
 
   def generate_delete(table_name, row_id)
     statement = select_all_query(table_name)
-    cmd = statement.execute(row_id).map do |row|
-      wc = row.map do |k, v|
-        if v.nil?
-          %(#{k} IS NULL)
-        else
-          %(#{k} = '#{v}')
+    cmd = @executor.execute do
+      statement.execute(row_id).map do |row|
+        wc = row.map do |k, v|
+          if v.nil?
+            %(#{k} IS NULL)
+          else
+            %(#{k} = '#{v}')
+          end
         end
+        %(DELETE FROM #{table_name} WHERE #{wc.join(" \nAND ")};)
       end
-      %(DELETE FROM #{table_name} WHERE #{wc.join(" \nAND ")};)
     end
     @logger.debug("generated delete command #{cmd}")
     cmd
@@ -206,20 +215,22 @@ class MysqlConnection
 
   def generate_insert(table_name, row_id)
     statement = select_all_query(table_name)
-    cmd = statement.execute(row_id).map do |row|
-      cols = []
-      vals = []
-      row.each do |k, v|
-        cols.push k
-        val = if v.nil?
-            "NULL"
-          else
-            %('#{v}')
-          end
-        vals.push(val)
-      end
-      %(INSERT INTO #{table_name} (#{cols.join(", ")})
+    cmd = @executor.execute do
+      statement.execute(row_id).map do |row|
+        cols = []
+        vals = []
+        row.each do |k, v|
+          cols.push k
+          val = if v.nil?
+              "NULL"
+            else
+              %('#{v}')
+            end
+          vals.push(val)
+        end
+        %(INSERT INTO #{table_name} (#{cols.join(", ")})
                            VALUES (#{vals.join(", ")});)
+      end
     end
     @logger.debug("generated insert command #{cmd}")
     cmd
@@ -228,17 +239,19 @@ class MysqlConnection
   def generate_update(table_name, row_id)
     primary_key = primary_key(table_name)
     statement = select_all_query(table_name)
-    cmd = statement.execute(row_id).map do |row|
-      pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
-        val = if v.nil?
-            "NULL"
-          else
-            %('#{v}')
-          end
-        %(#{k} = #{val})
-      end
-      %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
+    cmd = @executor.execute do
+      statement.execute(row_id).map do |row|
+        pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
+          val = if v.nil?
+              "NULL"
+            else
+              %('#{v}')
+            end
+          %(#{k} = #{val})
+        end
+        %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
          WHERE #{primary_key} = '#{row_id}';)
+      end
     end
     @logger.debug("generated insert command #{cmd}")
     cmd

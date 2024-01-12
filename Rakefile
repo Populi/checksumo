@@ -6,7 +6,7 @@ CLEAN << "spec/output.log"
 CLEAN << "spec/reports"
 CLEAN << "rspec.log"
 CLEAN << "build"
-CLEAN << "logs/*.log"
+CLEAN << "logs/"
 CLEAN << "*.log"
 
 task :test do

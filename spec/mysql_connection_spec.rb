@@ -1,4 +1,5 @@
 require "rspec"
+require "mysql2"
 
 require_relative "../mysql_connection"
 
@@ -33,8 +34,9 @@ describe MysqlConnection do
   let(:mysql_client) { double(Mysql2::Client) }
 
   before do
-    allow(logger).to receive(:info)
     allow(logger).to receive(:debug)
+    allow(logger).to receive(:info)
+    allow(logger).to receive(:error)
   end
 
   describe "methods" do
@@ -76,19 +78,34 @@ describe MysqlConnection do
 
   describe "#search" do
     subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    context "when the SQL query succeeds" do
+      it "adds results from mysql to the primary_key_cache" do
+        expect(mysql_client).to receive(:query) do |_args|
+          [{ "TableName" => "addresses", "PrimaryKey" => "id" }]
+        end
 
-    it "searches mysql" do
-      expect(mysql_client).to receive(:query) do |_args|
-        [{ "TableName" => "addresses", "PrimaryKey" => "id" }]
+        subject.search
+
+        expect(subject.primary_key_cache).to include(
+          {
+            "addresses" => "id",
+          }
+        )
       end
+    end
 
-      subject.search
-
-      expect(subject.primary_key_cache).to include(
-        {
-          "addresses" => "id",
-        }
-      )
+    context "when the search raises a network exception" do
+      it "retries the request" do
+        expect(mysql_client).to receive(:query).exactly(3).times.and_invoke(lambda { |q| raise Mysql2::ConnectionError.new("test error") },
+                                                                            lambda { |q| raise Mysql2::TimeoutError.new("test error") },
+                                                                            lambda { |q| [{ "TableName" => "addresses", "PrimaryKey" => "id" }] })
+        subject.search
+        expect(subject.primary_key_cache).to include(
+          {
+            "addresses" => "id",
+          }
+        )
+      end
     end
   end
 

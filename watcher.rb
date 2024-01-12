@@ -9,6 +9,7 @@ DEFAULT_WAIT_INTERVAL = 5
 # Watch pairs of tables for replication errors
 class ReplicationWatcher
   extend Memoist
+  include LogHelper
 
   attr_accessor :master, :replica, :table_pairs
 
@@ -18,7 +19,7 @@ class ReplicationWatcher
     @table_pairs = opts.fetch(:table_pairs, [])
 
     @logger = opts.fetch(:logger) do
-      LogHelper.logger(name: "#{self.class}")
+      logger()
     end
 
     table_names = opts.fetch(:table_names, [])

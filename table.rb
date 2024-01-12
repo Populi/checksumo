@@ -67,6 +67,7 @@ end
 # Encapsulate per-table logic
 class Table
   extend Memoist
+  include LogHelper
 
   attr_accessor :conn
 
@@ -74,7 +75,7 @@ class Table
     @conn = connection
     @name = table_name
     @logger = opts.fetch(:logger) do
-      LogHelper.logger(name: "#{self.class}")
+      logger()
     end
   end
 
@@ -108,6 +109,7 @@ end
 # Encapsulate table-pair (master:slave) logic
 class TablePair
   extend Memoist
+  include LogHelper
 
   attr_accessor :master, :replica, :table_name
 
@@ -117,7 +119,7 @@ class TablePair
     @replica = Table.new(table_name, replica_connection, opts)
     @chunk_size = opts.fetch(:chunk_size, DEFAULT_CHUNK_SIZE)
     @logger = opts.fetch(:logger) do
-      LogHelper.logger(name: "#{self.class}")
+      logger()
     end
   end
 
@@ -204,7 +206,7 @@ class TablePair
       @master.chunk_checksum(min: row_id, limit: @chunk_size).each do |mch|
         chunks.unshift(mch)
       end
-      @logger.info("chunks: #{chunks}")
+      @logger.debug("chunks: #{chunks}")
       row_id = chunks.first.max
       break if chunks.first.count < @chunk_size
     end

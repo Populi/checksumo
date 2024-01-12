@@ -1,30 +1,73 @@
 require "logging"
+require "fileutils"
+require "memoist"
 
-class LogHelper
-  def self.init(args = {})
-    log_dir = args.fetch(:log_dir, File.absolute_path("."))
-    @@directory = File.absolute_path(log_dir)
-    @@level = args.fetch(:level, :info)
+module LogHelper
+  extend Memoist
 
-    FileUtils.mkdir_p @@directory unless File.exist? File.absolute_path(@@directory)
+  class LogConfig
+    @@loggers = Hash[]
+    @@directory = ""
+    @@level = :info
 
-    @@logger = Logging.logger["root_logger"]
-    @@logger.level = args.fetch(:level, :info)
+    def self.loggers
+      @@loggers
+    end
 
-    file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{log_dir}/checksumo{{.%d}}.log", age: "daily")
-    @@logger.add_appenders(file_appender)
+    def self.directory
+      @@directory
+    end
 
-    @@logger
+    def self.level
+      @@level
+    end
+
+    def self.root_logger
+      @@loggers["root_logger"]
+    end
+
+    def self.init(opts = {})
+      log_dir = opts.fetch(:directory, File.absolute_path("."))
+      @@directory = File.absolute_path(log_dir)
+      @@level = opts.fetch(:level, :info)
+
+      FileUtils.mkdir_p @@directory unless File.exist? File.absolute_path(@@directory)
+
+      name = "root_logger"
+      root_logger = Logging.logger[name]
+      root_logger.level = opts.fetch(:level, :info)
+
+      file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/checksumo{{.%d}}.log", age: "daily")
+      root_logger.add_appenders(file_appender)
+
+      @@loggers[name] = root_logger
+    end
+
+    def self.logger(name, opts = {})
+      return @@loggers[name] unless @@loggers[name].nil?
+
+      log_dir = opts.fetch(:directory, @@directory)
+      level = opts.fetch(:level, @@level)
+
+      directory = File.absolute_path(log_dir)
+      FileUtils.mkdir_p directory unless File.exist? File.absolute_path(directory)
+
+      file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/#{name}{{.%d}}.log", age: "daily")
+
+      log = Logging.logger["#{name}_logger"]
+      log.level = opts.fetch(:level, :info)
+      log.add_appenders(file_appender)
+
+      @@loggers[name] = log
+
+      log
+    end
   end
 
-  def self.logger(args = {})
-    name = args.fetch(:name, "#{self.class}")
-    level = args.fetch(:level, @@level)
-    path = "#{@@directory}/#{name}{{.%d}}.log"
-
-    logger = Logging.logger["#{name}_logger"]
-    logger.level = level
-    file_appender = Logging::Appenders::RollingFile.new("#{name}_log_file", filename: path, age: "daily")
-    logger.add_appenders(file_appender)
+  def logger(opts = {})
+    name = opts.fetch(:name, self.class.to_s)
+    logger = LogConfig.logger(name, opts)
   end
+
+  memoize :logger
 end

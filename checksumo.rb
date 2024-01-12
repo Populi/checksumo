@@ -117,10 +117,14 @@ class Parser
   end
 end
 
+include LogHelper
+
+logger = nil
+
 def setup(opts = {})
   # reduce row- and table-locking to the least possible ACID compliance
   # see https://www.rubydoc.info/gems/mysql2/#initial-command-on-connect-and-reconnect
-  init_command = %(SET @@SESSION.transaction_isolation = 'READ-COMMITTED', @SESSION.transaction_read_only = '1')
+  init_command = %(SET @@SESSION.transaction_isolation = 'READ-UNCOMMITTED', @SESSION.transaction_read_only = '1')
 
   master_client = Mysql2::Client.new(host: opts[:master_hostname],
                                      port: opts[:master_port],
@@ -149,10 +153,10 @@ def set_alarm(opts = {})
   return unless opts[:deadline]
 
   deadline = opts[:deadline]
-  @logger.info("setting timeout alarm for '#{deadline}'")
+  logger.info("setting timeout alarm for '#{deadline}'")
 
   Signal.trap("ALRM") do
-    @logger.error("caught ALRM signal, timing out")
+    logger.error("caught ALRM signal, timing out")
 
     # message on STDOUT/STDERR too
     puts "Caught ALARM set for '#{deadline}', timing out!"
@@ -194,8 +198,8 @@ def main(args)
   options[:table_names] = table_names
 
   # Ensure logger is logging at the correct level
-  @logger = LogHelper.init(level: options.fetch(:log_level, :info), log_dir: options[:log_dir])
-  options[:logger] = @logger
+  LogHelper::LogConfig.init(level: options.fetch(:log_level, :info), directory: options[:log_dir])
+  logger = logger(name: "checksumo")
 
   # Set a timeout alarm before we do anything else
   set_alarm(options)
