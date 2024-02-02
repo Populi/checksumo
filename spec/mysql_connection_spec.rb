@@ -81,14 +81,14 @@ describe MysqlConnection do
     context "when the SQL query succeeds" do
       it "adds results from mysql to the primary_key_cache" do
         expect(mysql_client).to receive(:query) do |_args|
-          [{ "TableName" => "addresses", "PrimaryKey" => "id" }]
+          [{"TableName" => "addresses", "PrimaryKey" => "id"}]
         end
 
         subject.search
 
         expect(subject.primary_key_cache).to include(
           {
-            "addresses" => "id",
+            "addresses" => "id"
           }
         )
       end
@@ -97,12 +97,12 @@ describe MysqlConnection do
     context "when the search raises a network exception" do
       it "retries the request" do
         expect(mysql_client).to receive(:query).exactly(3).times.and_invoke(lambda { |q| raise Mysql2::ConnectionError.new("test error") },
-                                                                            lambda { |q| raise Mysql2::TimeoutError.new("test error") },
-                                                                            lambda { |q| [{ "TableName" => "addresses", "PrimaryKey" => "id" }] })
+          lambda { |q| raise Mysql2::TimeoutError.new("test error") },
+          lambda { |q| [{"TableName" => "addresses", "PrimaryKey" => "id"}] })
         subject.search
         expect(subject.primary_key_cache).to include(
           {
-            "addresses" => "id",
+            "addresses" => "id"
           }
         )
       end
@@ -149,7 +149,7 @@ describe MysqlConnection do
         expect(statement).to receive(:execute) { result }
         expect(result).to receive(:map) { ["id"] }
 
-        expect(mysql_client).to receive(:query) { [{ "max" => "12345667" }] }
+        expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
 
         expect(subject.max_row_id("addresses")).to eq("12345667")
       end
@@ -157,7 +157,7 @@ describe MysqlConnection do
     context "when primary key cache is populated" do
       it "uses the cached primary_key when querying for the max value" do
         subject.primary_key_cache["addresses"] = "id"
-        expect(mysql_client).to receive(:query) { [{ "max" => "12345667" }] }
+        expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
         expect(subject.max_row_id("addresses")).to eq("12345667")
       end
     end
@@ -175,14 +175,14 @@ describe MysqlConnection do
         expect(statement).to receive(:execute) { result }
         expect(result).to receive(:map) { ["id"] }
 
-        expect(mysql_client).to receive(:query) { [{ "min" => "12" }] }
+        expect(mysql_client).to receive(:query) { [{"min" => "12"}] }
         expect(subject.min_row_id("addresses")).to eq("12")
       end
     end
     context "when primary key cache is populated" do
       it "uses the cached primary_key when querying for the min value" do
         subject.primary_key_cache["addresses"] = "id"
-        expect(mysql_client).to receive(:query) { [{ "min" => "12" }] }
+        expect(mysql_client).to receive(:query) { [{"min" => "12"}] }
         expect(subject.min_row_id("addresses")).to eq("12")
       end
     end
@@ -272,7 +272,7 @@ describe MysqlConnection do
               col_result
             end
           end
-          allow(max_result).to receive(:map) { [{ "max" => "12345667" }] }
+          allow(max_result).to receive(:map) { [{"max" => "12345667"}] }
           allow(col_result).to receive(:fields) { %w[id some_field some_other_field another_field] }
 
           # Checksum queries
@@ -301,7 +301,7 @@ describe MysqlConnection do
               col_result
             end
           end
-          allow(max_result).to receive(:map) { [{ "max" => "12345667" }] }
+          allow(max_result).to receive(:map) { [{"max" => "12345667"}] }
           allow(col_result).to receive(:fields) { %w[id some_field some_other_field another_field] }
 
           # Checksum queries
@@ -342,7 +342,7 @@ describe MysqlConnection do
       expect(pk_result).to receive(:map) { ["id"] }
 
       expect(select_all_statement).to receive(:execute) { select_all_result }
-      expect(select_all_result).to receive(:map) { [{ "id" => 12, "some_field" => "yada yada" }] }
+      expect(select_all_result).to receive(:map) { [{"id" => 12, "some_field" => "yada yada"}] }
 
       subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
     end
@@ -372,7 +372,7 @@ describe MysqlConnection do
       expect(pk_result).to receive(:map) { ["id"] }
 
       expect(select_all_statement).to receive(:execute) { select_all_result }
-      expect(select_all_result).to receive(:map) { [{ "id" => 12, "some_field" => "yada yada" }] }
+      expect(select_all_result).to receive(:map) { [{"id" => 12, "some_field" => "yada yada"}] }
 
       subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
     end
@@ -402,7 +402,7 @@ describe MysqlConnection do
       expect(pk_result).to receive(:map) { ["id"] }
 
       expect(select_all_statement).to receive(:execute) { select_all_result }
-      expect(select_all_result).to receive(:map) { [{ "id" => 12, "some_field" => "yada yada" }] }
+      expect(select_all_result).to receive(:map) { [{"id" => 12, "some_field" => "yada yada"}] }
 
       subject.generate_update(row_checksum.table_name, row_checksum.row_id)
     end

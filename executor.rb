@@ -14,7 +14,7 @@ class Executor
     @no_retry = opts.fetch(:no_retry, DEFAULT_NO_RETRY_ERRORS)
     @retry_count = opts.fetch(:retry_count, DEFAULT_RETRY_COUNT).to_i
     @retry_wait = opts.fetch(:retry_wait, DEFAULT_RETRY_WAIT).to_f
-    @logger = opts.fetch(:logger) { logger() }
+    @logger = opts.fetch(:logger) { logger }
     @random = Random.new
   end
 
@@ -25,7 +25,7 @@ class Executor
     retry_wait = opts.fetch(:retry_wait, @retry_wait)
 
     begin
-      yield if block_given?
+      yield if block
     rescue => err
       @logger.error("caught error #{err}")
       raise err if @no_retry.include? err.class
@@ -33,7 +33,7 @@ class Executor
       @logger.debug("retrying...")
       raise err unless retry_count.positive?
 
-      retry_count = retry_count - 1
+      retry_count -= 1
       @logger.debug("#{retry_count} retries left")
 
       wait = @random.rand(0..retry_wait)

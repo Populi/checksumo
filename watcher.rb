@@ -19,7 +19,7 @@ class ReplicationWatcher
     @table_pairs = opts.fetch(:table_pairs, [])
 
     @logger = opts.fetch(:logger) do
-      logger()
+      logger
     end
 
     table_names = opts.fetch(:table_names, [])
@@ -66,29 +66,47 @@ class ReplicationWatcher
   end
 
   def generate_delete(row_comparison)
-    return unless !row_comparison.master? && row_comparison.replica?
+    return "" unless !row_comparison.master? && row_comparison.replica?
+
+    cmds = master.generate_delete(row_comparison.table_name, row_comparison.row_id)
+    return "" if cmds.empty?
 
     <<~COMMAND
       -- run on REPLICA
-      #{master.generate_delete(row_comparison.table_name, row_comparison.row_id).join("\n\n")}
+      #{cmds.join("\n\n")}
     COMMAND
   end
 
   def generate_insert(row_comparison)
-    return unless row_comparison.master? && !row_comparison.replica?
+    return "" unless row_comparison.master? && !row_comparison.replica?
+
+    cmds = master.generate_insert(row_comparison.table_name, row_comparison.row_id)
+    return "" if cmds.empty?
 
     <<~COMMAND
       -- run on REPLICA
-      #{master.generate_insert(row_comparison.table_name, row_comparison.row_id).join("\n\n")}
+      #{cmds.join("\n\n")}
     COMMAND
   end
 
   def generate_update(row_comparison)
-    return unless row_comparison.master? && row_comparison.replica?
+    return "" unless row_comparison.master? && row_comparison.replica?
+
+    # UPDATE is difficult: we can just blindly create an UPDATE from master, but that can be costly for indexing
+    # it's less expensive to update ONLY the columns that need to differ... which means we need to query both instances
+    #
+
+    tp = table_pairs.find { |tp| tp.table_name == row_comparison.table_name }
+    return "" if tp.nil?
+
+    cmds = tp.generate_update(row_comparison.row_id)
+
+    # cmds = master.generate_update(row_comparison.table_name, row_comparison.row_id)
+    return "" if cmds.empty?
 
     <<~COMMAND
       -- run on REPLICA
-      #{master.generate_update(row_comparison.table_name, row_comparison.row_id).join("\n\n")}
+      #{cmds}
     COMMAND
   end
 
@@ -134,7 +152,7 @@ class ReplicationWatcher
       time_to_bail = true
     end
 
-    row_diff = delta()
+    row_diff = delta
     puts "watch -ing row_diff: #{row_diff}"
 
     sleep_time = opts.fetch(:wait_interval, DEFAULT_WAIT_INTERVAL)
@@ -152,9 +170,9 @@ class ReplicationWatcher
       @logger.debug("updated tables to check: #{@table_names}")
 
       sleep sleep_time
-      row_diff = delta()
+      row_diff = delta
     end
 
-    reconcile()
+    reconcile
   end
 end

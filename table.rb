@@ -75,7 +75,7 @@ class Table
     @conn = connection
     @name = table_name
     @logger = opts.fetch(:logger) do
-      logger()
+      logger
     end
   end
 
@@ -104,6 +104,10 @@ class Table
   end
 
   memoize :primary_key
+
+  def row_values(row_id)
+    @conn.row_values(@name, row_id)
+  end
 end
 
 # Encapsulate table-pair (master:slave) logic
@@ -119,7 +123,7 @@ class TablePair
     @replica = Table.new(table_name, replica_connection, opts)
     @chunk_size = opts.fetch(:chunk_size, DEFAULT_CHUNK_SIZE)
     @logger = opts.fetch(:logger) do
-      logger()
+      logger
     end
   end
 
@@ -166,7 +170,7 @@ class TablePair
 
   def compare_chunks(opts = {})
     diff = []
-    primary_key = @master.primary_key()
+    primary_key = @master.primary_key
     master_chunks = master_chunks(opts)
     master_chunks.each do |mch|
       # This should only be one chunk, but it's technically a list, so we'll treat it like a list
@@ -174,11 +178,11 @@ class TablePair
         next if rch.equal?(mch) # only keep checksums that are mismatched
 
         diff << ChunkComparison.new(master: mch,
-                                    replica: rch,
-                                    table_name: mch.table_name,
-                                    primary_key: primary_key,
-                                    min_row: mch.min,
-                                    max_row: mch.max)
+          replica: rch,
+          table_name: mch.table_name,
+          primary_key: primary_key,
+          min_row: mch.min,
+          max_row: mch.max)
       end
     end
 
@@ -188,13 +192,31 @@ class TablePair
         max_row_id: @master.max_row_id,
         min_row_id: @master.min_row_id,
         primary_key: @master.primary_key,
-        diff: diff,
+        diff: diff
       }
 
       @logger.debug("checksum diff: #{summary}")
     end
 
     diff
+  end
+
+  def generate_update(row_id)
+    delta = row_diff(row_id)
+
+    return "" if delta.empty?
+
+    primary_key = @master.primary_key
+    pairs = delta.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
+      val = if v.nil?
+        "NULL"
+      else
+        %('#{v}')
+      end
+      %(#{k} = #{val})
+    end
+    %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
+         WHERE #{primary_key} = '#{row_id}';)
   end
 
   private
@@ -212,5 +234,17 @@ class TablePair
     end
 
     chunks.reverse
+  end
+
+  # Find a per-column diff for a table pair
+  def row_diff(row_id)
+    master_row = @master.row_values(row_id).first
+    replica_row = @replica.row_values(row_id).first
+    delta = Hash[]
+    master_row.each do |k, v|
+      next if replica_row[k] == v
+      delta[k] = v
+    end
+    delta
   end
 end

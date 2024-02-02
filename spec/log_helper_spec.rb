@@ -15,18 +15,18 @@ describe "LogHelper" do
     it { should respond_to(:root_logger) }
   end
   context "when #init is called" do
-    subject { TestClass.new() }
+    subject { TestClass.new }
     it "creates a new root_logger" do
-      LogHelper::LogConfig.init()
+      LogHelper::LogConfig.init
       expect(LogHelper::LogConfig.loggers).to include("root_logger")
     end
   end
   context "when #logger is called" do
-    subject { TestClass.new() }
+    subject { TestClass.new }
     it "creates a new logger in LogHelper::LogConfig" do
-      LogHelper::LogConfig.init()
+      LogHelper::LogConfig.init
 
-      logger = subject.logger()
+      logger = subject.logger
       expect(logger).to be_a_kind_of(Logging::Logger)
       expect(LogHelper::LogConfig.loggers).to include("TestClass")
     end

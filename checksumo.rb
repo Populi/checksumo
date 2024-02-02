@@ -14,11 +14,11 @@ require_relative "watcher"
 
 # Constants
 FLAGS = Mysql2::Client::REMEMBER_OPTIONS |
-        Mysql2::Client::LONG_PASSWORD |
-        Mysql2::Client::LONG_FLAG |
-        Mysql2::Client::PROTOCOL_41 |
-        Mysql2::Client::SECURE_CONNECTION |
-        Mysql2::Client::MULTI_STATEMENTS
+  Mysql2::Client::LONG_PASSWORD |
+  Mysql2::Client::LONG_FLAG |
+  Mysql2::Client::PROTOCOL_41 |
+  Mysql2::Client::SECURE_CONNECTION |
+  Mysql2::Client::MULTI_STATEMENTS
 
 # Command-line Parser
 class Parser
@@ -37,7 +37,7 @@ class Parser
       timeout: 10,
       watch_mode: :CHUNK_SUMMARY,
       wait_interval: 5,
-      log_dir: "./logs",
+      log_dir: "./logs"
     }
 
     args.merge!(defaults) if defaults
@@ -55,10 +55,10 @@ class Parser
 
       opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
         args[:verbose] = if v
-            :debug
-          else
-            :warn
-          end
+          :debug
+        else
+          :warn
+        end
       end
 
       opts.on("--timeout=DURATION", "Timeout in minutes [#{args[:timeout]}]") do |min|
@@ -70,7 +70,7 @@ class Parser
       end
 
       opts.on("--watch-mode=MODE", "Watch mode: one of (CHUNK_SUMMARY, ROW_DIFF, WAIT) [#{args[:watch_mode]}]") do |m|
-        mode = m&.upcase.to_sym
+        mode = m&.upcase&.to_sym
         if [:CHUNK_SUMMARY, :ROW_DIFF, :WAIT].include?(mode)
           args[:watch_mode] = mode
         else
@@ -127,25 +127,25 @@ def setup(opts = {})
   init_command = %(SET @@SESSION.transaction_isolation = 'READ-UNCOMMITTED', @SESSION.transaction_read_only = '1')
 
   master_client = Mysql2::Client.new(host: opts[:master_hostname],
-                                     port: opts[:master_port],
-                                     flags: FLAGS,
-                                     username: opts[:master_user_name],
-                                     password: opts[:master_password],
-                                     database: opts[:database_name],
-                                     init_command: init_command)
+    port: opts[:master_port],
+    flags: FLAGS,
+    username: opts[:master_user_name],
+    password: opts[:master_password],
+    database: opts[:database_name],
+    init_command: init_command)
 
   replica_client = Mysql2::Client.new(host: opts[:replica_hostname],
-                                      port: opts[:replica_port],
-                                      flags: FLAGS,
-                                      username: opts[:replica_user_name],
-                                      password: opts[:replica_password],
-                                      database: opts[:database_name],
-                                      init_command: init_command)
+    port: opts[:replica_port],
+    flags: FLAGS,
+    username: opts[:replica_user_name],
+    password: opts[:replica_password],
+    database: opts[:database_name],
+    init_command: init_command)
 
   ReplicationWatcher.new(master: MysqlConnection.new(client: master_client),
-                         replica: MysqlConnection.new(client: replica_client),
-                         table_pairs: [],
-                         table_names: opts.fetch(:table_names, []))
+    replica: MysqlConnection.new(client: replica_client),
+    table_pairs: [],
+    table_names: opts.fetch(:table_names, []))
 end
 
 def set_alarm(opts = {})
@@ -214,10 +214,10 @@ def main(args)
     watcher.watch(options)
   elsif watch_mode == :ROW_DIFF
     # create a row-level reconcile report and exit
-    watcher.reconcile()
+    watcher.reconcile
   else
     # Default path: create a chunk_checksum report and exit
-    watcher.reconcile_chunks()
+    watcher.reconcile_chunks
   end
 end
 

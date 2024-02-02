@@ -5,6 +5,15 @@ require "memoist"
 module LogHelper
   extend Memoist
 
+  def logger(opts = {})
+    @logger ||= begin
+      name = opts.fetch(:name, self.class.to_s)
+      LogConfig.logger(name, opts)
+    end
+  end
+
+  memoize :logger
+
   class LogConfig
     @@loggers = Hash[]
     @@directory = ""
@@ -63,11 +72,4 @@ module LogHelper
       log
     end
   end
-
-  def logger(opts = {})
-    name = opts.fetch(:name, self.class.to_s)
-    logger = LogConfig.logger(name, opts)
-  end
-
-  memoize :logger
 end

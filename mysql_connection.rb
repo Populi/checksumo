@@ -72,13 +72,13 @@ class MysqlConnection
 
     @client = opts.fetch(:client) do
       Mysql2::Client.new(host: host,
-                         port: port,
-                         username: username,
-                         password: password)
+        port: port,
+        username: username,
+        password: password)
     end
 
     @logger = opts.fetch(:logger) do
-      logger()
+      logger
     end
     @executor = Executor.new(logger: @logger)
   end
@@ -102,7 +102,7 @@ class MysqlConnection
 
     @executor.execute do
       @client.query(query).each do |row|
-        @primary_key_cache[row["TableName"]] = row["PrimaryKey"] unless row["PrimaryKey"].match(",")
+        @primary_key_cache[row["TableName"]] = row["PrimaryKey"] unless row["PrimaryKey"].match?(",")
       end
     end
 
@@ -180,18 +180,18 @@ class MysqlConnection
     primary_key = primary_key(table_name)
 
     result = if limit.positive?
-        chunk_checksum_unbounded(table_name, min, limit)
-      else
-        chunk_checksum_bounded(table_name, min, max)
-      end
+      chunk_checksum_unbounded(table_name, min, limit)
+    else
+      chunk_checksum_bounded(table_name, min, max)
+    end
 
     result.map do |row|
       ChunkChecksum.new(table_name: table_name,
-                        crc32: row["CHECKSUM"],
-                        count: row["COUNT"],
-                        min: row["START"],
-                        max: row["END"],
-                        primary_key: primary_key)
+        crc32: row["CHECKSUM"],
+        count: row["COUNT"],
+        min: row["START"],
+        max: row["END"],
+        primary_key: primary_key)
     end
   end
 
@@ -222,10 +222,10 @@ class MysqlConnection
         row.each do |k, v|
           cols.push k
           val = if v.nil?
-              "NULL"
-            else
-              %('#{v}')
-            end
+            "NULL"
+          else
+            %('#{v}')
+          end
           vals.push(val)
         end
         %(INSERT INTO #{table_name} (#{cols.join(", ")})
@@ -236,6 +236,9 @@ class MysqlConnection
     cmd
   end
 
+  # this is probably the more correct generate_update implementation
+  # because of performance with heavily indexed tables, we'll use
+  # TablePair::generate_update instead.
   def generate_update(table_name, row_id)
     primary_key = primary_key(table_name)
     statement = select_all_query(table_name)
@@ -243,10 +246,10 @@ class MysqlConnection
       statement.execute(row_id).map do |row|
         pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
           val = if v.nil?
-              "NULL"
-            else
-              %('#{v}')
-            end
+            "NULL"
+          else
+            %('#{v}')
+          end
           %(#{k} = #{val})
         end
         %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
@@ -255,6 +258,21 @@ class MysqlConnection
     end
     @logger.debug("generated insert command #{cmd}")
     cmd
+  end
+
+  def row_values(table_name, row_id)
+    primary_key = primary_key(table_name)
+    statement = select_all_query(table_name)
+
+    rows = []
+    @executor.execute do
+      statement.execute(row_id).each do |row|
+        rows << row
+      end
+    end
+
+    @logger.debug("returning #{rows.count} rows from #{table_name} where #{primary_key} = '#{row_id}'")
+    rows
   end
 
   private
