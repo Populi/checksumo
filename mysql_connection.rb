@@ -59,7 +59,7 @@ class MysqlConnection
   extend Memoist
   include LogHelper
 
-  attr_accessor :table_cache, :table_names, :primary_key_cache
+  attr_accessor :database_name, :table_cache, :table_names, :primary_key_cache
 
   def initialize(opts = {})
     host = opts.fetch(:host, "")
@@ -76,6 +76,8 @@ class MysqlConnection
         username: username,
         password: password)
     end
+
+    @database_name = opts.fetch(:database_name, nil)
 
     @logger = opts.fetch(:logger) do
       logger
@@ -197,8 +199,12 @@ class MysqlConnection
 
   def generate_delete(table_name, row_id)
     statement = select_all_query(table_name)
-    cmd = @executor.execute do
-      statement.execute(row_id).map do |row|
+    if @database_name
+      table_name = "#{@database_name}.#{table_name}"
+    end
+    cmd = []
+    @executor.execute do
+      statement.execute(row_id).each do |row|
         wc = row.map do |k, v|
           if v.nil?
             %(#{k} IS NULL)
@@ -206,7 +212,7 @@ class MysqlConnection
             %(#{k} = '#{v}')
           end
         end
-        %(DELETE FROM #{table_name} WHERE #{wc.join(" \nAND ")};)
+        cmd << %(DELETE FROM #{table_name} WHERE #{wc.join(" \n\tAND ")}\n;)
       end
     end
     @logger.debug("generated delete command #{cmd}")
@@ -215,8 +221,12 @@ class MysqlConnection
 
   def generate_insert(table_name, row_id)
     statement = select_all_query(table_name)
-    cmd = @executor.execute do
-      statement.execute(row_id).map do |row|
+    if @database_name
+      table_name = "#{@database_name}.#{table_name}"
+    end
+    cmd = []
+    @executor.execute do
+      statement.execute(row_id).each do |row|
         cols = []
         vals = []
         row.each do |k, v|
@@ -228,8 +238,8 @@ class MysqlConnection
           end
           vals.push(val)
         end
-        %(INSERT INTO #{table_name} (#{cols.join(", ")})
-                           VALUES (#{vals.join(", ")});)
+        cmd << %(INSERT INTO #{table_name} (#{cols.join(", ")})
+                     VALUES (#{vals.join(", ")})\n;)
       end
     end
     @logger.debug("generated insert command #{cmd}")
@@ -242,6 +252,9 @@ class MysqlConnection
   def generate_update(table_name, row_id)
     primary_key = primary_key(table_name)
     statement = select_all_query(table_name)
+    if @database_name
+      table_name = "#{@database_name}.#{table_name}"
+    end
     cmd = @executor.execute do
       statement.execute(row_id).map do |row|
         pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|

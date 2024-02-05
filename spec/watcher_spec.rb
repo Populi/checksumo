@@ -15,8 +15,33 @@ describe ReplicationWatcher do
     allow(logger).to receive(:error)
   end
 
+  describe "methods" do
+    let(:table_names) { %w[addresses media media_encodings] }
+    subject { ReplicationWatcher.new(master: master, replica: replica, logger: logger, table_names: table_names) }
+    it { should respond_to(:database_name) }
+    it { should respond_to(:logger) }
+    it { should respond_to(:master) }
+    it { should respond_to(:replica) }
+    it { should respond_to(:table_pairs) }
+  end
+
   describe "#initialize" do
     let(:table_names) { %w[addresses media media_encodings] }
+    let(:database_name) { "some_production_database" }
+    context "when database_name is provided" do
+      subject { ReplicationWatcher.new(database_name: database_name, master: master, replica: replica, logger: logger, table_names: table_names) }
+
+      it "should set the database name correctly" do
+        expect(subject.database_name).to eq(database_name)
+      end
+    end
+    context "when database_name is not provided" do
+      subject { ReplicationWatcher.new(master: master, replica: replica, logger: logger, table_names: table_names) }
+
+      it "should assign a nil database name" do
+        expect(subject.database_name).to be_nil
+      end
+    end
     context "when logger is provided" do
       subject { ReplicationWatcher.new(master: master, replica: replica, logger: logger, table_names: table_names) }
       it "should assign master correctly" do
@@ -149,7 +174,7 @@ describe ReplicationWatcher do
       let(:row_comparison) { RowComparison.new(row_id: 12, table_name: "addresses", replica: replica) }
       context "when master generates no sql commands" do
         before do
-          allow(master).to receive(:generate_delete).once { [] }
+          allow(replica).to receive(:generate_delete).once { [] }
         end
         it "should return an empty string" do
           expect(subject.generate_delete(row_comparison)).to be_empty
@@ -159,7 +184,7 @@ describe ReplicationWatcher do
       context "when there are sql commands" do
         let(:primary_key) { "some_primary_key" }
         before do
-          allow(master).to receive(:generate_delete) do |table_name, row_id|
+          allow(replica).to receive(:generate_delete) do |table_name, row_id|
             [
               %(DELETE FROM #{table_name} WHERE #{primary_key} = '#{row_id}';)
             ]

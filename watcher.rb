@@ -11,11 +11,12 @@ class ReplicationWatcher
   extend Memoist
   include LogHelper
 
-  attr_accessor :master, :replica, :table_pairs
+  attr_accessor :database_name, :master, :replica, :table_pairs
 
   def initialize(opts = {})
     @master = opts.fetch(:master)
     @replica = opts.fetch(:replica)
+    @database_name = opts.fetch(:database_name, nil)
     @table_pairs = opts.fetch(:table_pairs, [])
 
     @logger = opts.fetch(:logger) do
@@ -26,7 +27,7 @@ class ReplicationWatcher
     table_names.each do |n|
       next unless n.match?('^[A-Za-z_\.]+$')
       @logger.debug("adding table pair for #{n}")
-      @table_pairs << TablePair.new(n, @master, @replica)
+      @table_pairs << TablePair.new(n, @master, @replica, database_name: @database_name)
     end
 
     @logger.debug("initialized ReplicationWatcher: #{self}")
@@ -36,14 +37,14 @@ class ReplicationWatcher
     @table_pairs = []
     table_names.each do |t|
       @logger.debug("creating TablePair from '#{t.inspect}'")
-      @table_pairs << TablePair.new(t, @master, @replica)
+      @table_pairs << TablePair.new(t, @master, @replica, database_name: @database_name)
     end
     @table_pairs.uniq! { |tp| tp.table_name }
   end
 
   def search
     @master.search.each_key do |tablename|
-      @table_pairs << TablePair.new(tablename, @master, @replica)
+      @table_pairs << TablePair.new(tablename, @master, @replica, database_name: @database_name)
     end
   end
 
@@ -68,7 +69,9 @@ class ReplicationWatcher
   def generate_delete(row_comparison)
     return "" unless !row_comparison.master? && row_comparison.replica?
 
-    cmds = master.generate_delete(row_comparison.table_name, row_comparison.row_id)
+    @logger.info("generating DELETE commands for #{row_comparison}")
+
+    cmds = replica.generate_delete(row_comparison.table_name, row_comparison.row_id)
     return "" if cmds.empty?
 
     <<~COMMAND
@@ -106,7 +109,7 @@ class ReplicationWatcher
 
     <<~COMMAND
       -- run on REPLICA
-      #{cmds}
+      #{cmds}\n\n
     COMMAND
   end
 

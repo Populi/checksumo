@@ -115,13 +115,14 @@ class TablePair
   extend Memoist
   include LogHelper
 
-  attr_accessor :master, :replica, :table_name
+  attr_accessor :database_name, :master, :replica, :table_name
 
   def initialize(table_name, master_connection, replica_connection, opts = {})
     @table_name = table_name
     @master = Table.new(table_name, master_connection, opts)
     @replica = Table.new(table_name, replica_connection, opts)
     @chunk_size = opts.fetch(:chunk_size, DEFAULT_CHUNK_SIZE)
+    @database_name = opts.fetch(:database_name, nil)
     @logger = opts.fetch(:logger) do
       logger
     end
@@ -206,6 +207,12 @@ class TablePair
 
     return "" if delta.empty?
 
+    table_name = if @database_name
+      "#{@database_name}.#{@table_name}"
+    else
+      @table_name
+    end
+
     primary_key = @master.primary_key
     pairs = delta.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
       val = if v.nil?
@@ -216,7 +223,7 @@ class TablePair
       %(#{k} = #{val})
     end
     %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
-         WHERE #{primary_key} = '#{row_id}';)
+         WHERE #{primary_key} = '#{row_id}'\n;)
   end
 
   private

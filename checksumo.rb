@@ -126,26 +126,33 @@ def setup(opts = {})
   # see https://www.rubydoc.info/gems/mysql2/#initial-command-on-connect-and-reconnect
   init_command = %(SET @@SESSION.transaction_isolation = 'READ-UNCOMMITTED', @SESSION.transaction_read_only = '1')
 
-  master_client = Mysql2::Client.new(host: opts[:master_hostname],
+  master_client = Mysql2::Client.new(
+    host: opts[:master_hostname],
     port: opts[:master_port],
     flags: FLAGS,
     username: opts[:master_user_name],
     password: opts[:master_password],
     database: opts[:database_name],
-    init_command: init_command)
+    init_command: init_command
+  )
 
-  replica_client = Mysql2::Client.new(host: opts[:replica_hostname],
+  replica_client = Mysql2::Client.new(
+    host: opts[:replica_hostname],
     port: opts[:replica_port],
     flags: FLAGS,
     username: opts[:replica_user_name],
     password: opts[:replica_password],
     database: opts[:database_name],
-    init_command: init_command)
+    init_command: init_command
+  )
 
-  ReplicationWatcher.new(master: MysqlConnection.new(client: master_client),
-    replica: MysqlConnection.new(client: replica_client),
+  ReplicationWatcher.new(
+    master: MysqlConnection.new(client: master_client, database_name: opts[:database_name]),
+    replica: MysqlConnection.new(client: replica_client, database_name: opts[:database_name]),
+    database_name: opts[:database_name],
     table_pairs: [],
-    table_names: opts.fetch(:table_names, []))
+    table_names: opts.fetch(:table_names, [])
+  )
 end
 
 def set_alarm(opts = {})

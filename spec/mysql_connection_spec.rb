@@ -32,6 +32,7 @@ end
 describe MysqlConnection do
   let(:logger) { double(Logging::Logger) }
   let(:mysql_client) { double(Mysql2::Client) }
+  let(:database_name) { "production_database_name" }
 
   before do
     allow(logger).to receive(:debug)
@@ -40,7 +41,7 @@ describe MysqlConnection do
   end
 
   describe "methods" do
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     it { should respond_to(:check) }
     it { should respond_to(:search) }
@@ -48,10 +49,11 @@ describe MysqlConnection do
     it { should respond_to(:primary_key) }
     it { should respond_to(:max_row_id) }
     it { should respond_to(:min_row_id) }
+    it { should respond_to(:database_name) }
   end
 
   describe "#new" do
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     it "has an empty @table_names array" do
       expect(subject.table_names).to be_empty
@@ -59,10 +61,21 @@ describe MysqlConnection do
     it "has an empty @primary_key_cache" do
       expect(subject.primary_key_cache).to be_empty
     end
+    context "when database name is provided" do
+      it "has the correct database_name" do
+        expect(subject.database_name).to eq(database_name)
+      end
+    end
+    context "when database name is NOT provided" do
+      subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+      it "returns nil" do
+        expect(subject.database_name).to be_nil
+      end
+    end
   end
 
   describe "#check" do
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     it "adds table_names to @table_names" do
       tables = %w[addresses aid]
@@ -77,7 +90,7 @@ describe MysqlConnection do
   end
 
   describe "#search" do
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
     context "when the SQL query succeeds" do
       it "adds results from mysql to the primary_key_cache" do
         expect(mysql_client).to receive(:query) do |_args|
@@ -112,7 +125,7 @@ describe MysqlConnection do
   describe "#columns" do
     let(:result) { double(Mysql2::Result) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     it "executes a simple query" do
       expect(mysql_client).to receive(:query) { result }
@@ -126,7 +139,7 @@ describe MysqlConnection do
     let(:result) { double(Mysql2::Result) }
     let(:statement) { double(Mysql2::Statement) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     it "prepares and executes a query" do
       expect(mysql_client).to receive(:prepare) { statement }
@@ -141,7 +154,7 @@ describe MysqlConnection do
     let(:result) { double(Mysql2::Result) }
     let(:statement) { double(Mysql2::Statement) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     context "when primary key cache is empty" do
       it "queries for primary_key before querying for the max value" do
@@ -167,7 +180,7 @@ describe MysqlConnection do
     let(:result) { double(Mysql2::Result) }
     let(:statement) { double(Mysql2::Statement) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     context "when primary key cache is empty" do
       it "queries for primary_key before querying for the min value" do
@@ -195,7 +208,7 @@ describe MysqlConnection do
     let(:checksum_statement) { double(Mysql2::Statement) }
     let(:pk_statement) { double(Mysql2::Statement) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     context "when primary key cache is empty" do
       it "queries for primary_key and columns before querying for the row_checksum" do
@@ -254,7 +267,7 @@ describe MysqlConnection do
     let(:checksum_statement) { double(Mysql2::Statement) }
     let(:pk_statement) { double(Mysql2::Statement) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
 
     context "when primary key cache is not empty" do
       context "when :limit is positive" do
@@ -325,26 +338,53 @@ describe MysqlConnection do
     let(:select_all_statement) { double(Mysql2::Statement) }
     let(:select_all_result) { double(Mysql2::Result) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
-    it "queries existing rows" do
-      expect(mysql_client).to receive(:prepare).twice do |*args|
-        query = args.shift
-        if query.match?("PRIMARY KEY")
-          pk_statement
-        elsif query.match?('select \\* from .+ where .+')
-          select_all_statement
-        else
-          raise "missed all branches #{query}"
+    context "when database_name is set" do
+      subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
+      it "queries existing rows and returns commands including database name" do
+        expect(mysql_client).to receive(:prepare).twice do |*args|
+          query = args.shift
+          if query.match?("PRIMARY KEY")
+            pk_statement
+          elsif query.match?('select \\* from .+ where .+')
+            select_all_statement
+          else
+            raise "missed all branches #{query}"
+          end
         end
+
+        expect(pk_statement).to receive(:execute) { pk_result }
+        expect(pk_result).to receive(:map) { ["id"] }
+
+        expect(select_all_statement).to receive(:execute).with(row_checksum.row_id) { select_all_result }
+        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+
+        cmd = subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
+        expect(cmd).to include(a_string_matching(/production_database_name\.addresses/))
       end
+    end
+    context "when database_name is not set" do
+      subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+      it "queries existing rows and returns commands not including database name" do
+        expect(mysql_client).to receive(:prepare).twice do |*args|
+          query = args.shift
+          if query.match?("PRIMARY KEY")
+            pk_statement
+          elsif query.match?('select \\* from .+ where .+')
+            select_all_statement
+          else
+            raise "missed all branches #{query}"
+          end
+        end
 
-      expect(pk_statement).to receive(:execute) { pk_result }
-      expect(pk_result).to receive(:map) { ["id"] }
+        expect(pk_statement).to receive(:execute) { pk_result }
+        expect(pk_result).to receive(:map) { ["id"] }
 
-      expect(select_all_statement).to receive(:execute) { select_all_result }
-      expect(select_all_result).to receive(:map) { [{"id" => 12, "some_field" => "yada yada"}] }
+        expect(select_all_statement).to receive(:execute) { select_all_result }
+        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
 
-      subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
+        cmd = subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
+        expect(cmd).to_not include(a_string_matching(/production_database_name\.addresses/))
+      end
     end
   end
   describe "#generate_insert" do
@@ -355,26 +395,53 @@ describe MysqlConnection do
     let(:select_all_statement) { double(Mysql2::Statement) }
     let(:select_all_result) { double(Mysql2::Result) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
-    it "queries existing rows" do
-      expect(mysql_client).to receive(:prepare).twice do |*args|
-        query = args.shift
-        if query.match?("PRIMARY KEY")
-          pk_statement
-        elsif query.match?('select \\* from .+ where .+')
-          select_all_statement
-        else
-          raise "missed all branches #{query}"
+    context "when database_name is provided" do
+      subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
+      it "queries existing rows" do
+        expect(mysql_client).to receive(:prepare).twice do |*args|
+          query = args.shift
+          if query.match?("PRIMARY KEY")
+            pk_statement
+          elsif query.match?('select \\* from .+ where .+')
+            select_all_statement
+          else
+            raise "missed all branches #{query}"
+          end
         end
+
+        expect(pk_statement).to receive(:execute) { pk_result }
+        expect(pk_result).to receive(:map) { ["id"] }
+
+        expect(select_all_statement).to receive(:execute) { select_all_result }
+        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+
+        cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
+        expect(cmd).to include(a_string_matching(/production_database_name\.addresses/))
       end
+    end
+    context "when database_name is not provided" do
+      subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+      it "queries existing rows" do
+        expect(mysql_client).to receive(:prepare).twice do |*args|
+          query = args.shift
+          if query.match?("PRIMARY KEY")
+            pk_statement
+          elsif query.match?('select \\* from .+ where .+')
+            select_all_statement
+          else
+            raise "missed all branches #{query}"
+          end
+        end
 
-      expect(pk_statement).to receive(:execute) { pk_result }
-      expect(pk_result).to receive(:map) { ["id"] }
+        expect(pk_statement).to receive(:execute) { pk_result }
+        expect(pk_result).to receive(:map) { ["id"] }
 
-      expect(select_all_statement).to receive(:execute) { select_all_result }
-      expect(select_all_result).to receive(:map) { [{"id" => 12, "some_field" => "yada yada"}] }
+        expect(select_all_statement).to receive(:execute) { select_all_result }
+        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
 
-      subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
+        cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
+        expect(cmd).to_not include(a_string_matching(/production_database_name\.addresses/))
+      end
     end
   end
   describe "#generate_update" do
@@ -385,7 +452,7 @@ describe MysqlConnection do
     let(:select_all_statement) { double(Mysql2::Statement) }
     let(:select_all_result) { double(Mysql2::Result) }
 
-    subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
     it "queries existing rows" do
       expect(mysql_client).to receive(:prepare).twice do |*args|
         query = args.shift
