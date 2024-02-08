@@ -203,7 +203,13 @@ class MysqlConnection
       table_name = "#{@database_name}.#{table_name}"
     end
     cmd = []
-    @executor.execute do
+
+    fall_back = proc do |err|
+      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      cmd
+    end
+
+    @executor.execute(on_fail: fall_back) do
       statement.execute(row_id).each do |row|
         wc = row.map do |k, v|
           if v.nil?
@@ -224,8 +230,15 @@ class MysqlConnection
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
     end
+
     cmd = []
-    @executor.execute do
+
+    fall_back = proc do |err|
+      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      cmd
+    end
+
+    @executor.execute(on_fail: fall_back) do
       statement.execute(row_id).each do |row|
         cols = []
         vals = []
@@ -255,7 +268,13 @@ class MysqlConnection
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
     end
-    cmd = @executor.execute do
+
+    fall_back = proc do |err|
+      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      []
+    end
+
+    cmd = @executor.execute(on_fail: fall_back) do
       statement.execute(row_id).map do |row|
         pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
           val = if v.nil?
@@ -278,7 +297,13 @@ class MysqlConnection
     statement = select_all_query(table_name)
 
     rows = []
-    @executor.execute do
+
+    fall_back = proc do |err|
+      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      rows
+    end
+
+    @executor.execute(on_fail: fall_back) do
       statement.execute(row_id).each do |row|
         rows << row
       end

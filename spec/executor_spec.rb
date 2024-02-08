@@ -64,9 +64,9 @@ describe Executor do
     context "when the returned error is on the no-retry list" do
       subject {
         Executor.new(retry_count: retry_count,
-                     retry_wait: retry_wait,
-                     logger: logger,
-                     no_retry: [Mysql2::Error, ZeroDivisionError])
+          retry_wait: retry_wait,
+          logger: logger,
+          no_retry: [Mysql2::Error, ZeroDivisionError])
       }
       it "should raise the Exception after with no retries" do
         expect(mysql_client).to receive(:query).once { raise ZeroDivisionError.new("some spurious sql-related error") }
@@ -75,6 +75,24 @@ describe Executor do
             mysql_client.query("select * from should_raise_error;")
           end
         end.to raise_error(ZeroDivisionError)
+      end
+    end
+    context "when an on-fail is provided" do
+      subject {
+        Executor.new(retry_count: retry_count,
+          retry_wait: retry_wait,
+          logger: logger,
+          no_retry: [Mysql2::Error, ZeroDivisionError])
+      }
+      it "should return the value of the on-fail method" do
+        expect(mysql_client).to receive(:query).once { raise ZeroDivisionError.new("some spurious sql-related error") }
+        fallback = ->(_e) { "how do you like them apples?" }
+
+        result = subject.execute(on_fail: fallback) do
+          mysql_client.query("select * from should_raise_error;")
+        end
+
+        expect(result).to match(/how do you like them apples\?/)
       end
     end
   end

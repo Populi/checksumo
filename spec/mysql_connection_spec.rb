@@ -443,6 +443,30 @@ describe MysqlConnection do
         expect(cmd).to_not include(a_string_matching(/production_database_name\.addresses/))
       end
     end
+    context "when sql query throws an exception" do
+      subject { MysqlConnection.new(client: mysql_client, logger: logger) }
+      it "returns an empty command list" do
+        expect(mysql_client).to receive(:prepare).twice do |*args|
+          query = args.shift
+          if query.match?("PRIMARY KEY")
+            pk_statement
+          elsif query.match?('select \\* from .+ where .+')
+            select_all_statement
+          else
+            raise "missed all branches #{query}"
+          end
+        end
+
+        expect(pk_statement).to receive(:execute) { pk_result }
+        expect(pk_result).to receive(:map) { ["id"] }
+
+        expect(select_all_statement).to receive(:execute).at_least(:once).and_raise("invalid date")
+        # expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+
+        cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
+        expect(cmd).to be_empty
+      end
+    end
   end
   describe "#generate_update" do
     let(:pk_result) { double(Mysql2::Result) }
