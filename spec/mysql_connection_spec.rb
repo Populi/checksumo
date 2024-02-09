@@ -341,7 +341,7 @@ describe MysqlConnection do
     context "when database_name is set" do
       subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
       it "queries existing rows and returns commands including database name" do
-        expect(mysql_client).to receive(:prepare).twice do |*args|
+        expect(mysql_client).to receive(:prepare).once do |*args|
           query = args.shift
           if query.match?("PRIMARY KEY")
             pk_statement
@@ -355,8 +355,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(select_all_statement).to receive(:execute).with(row_checksum.row_id) { select_all_result }
-        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+        expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything) { {"id" => 12, "some_field" => "yada yada"} }
 
         cmd = subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to include(a_string_matching(/production_database_name\.addresses/))
@@ -365,7 +364,7 @@ describe MysqlConnection do
     context "when database_name is not set" do
       subject { MysqlConnection.new(client: mysql_client, logger: logger) }
       it "queries existing rows and returns commands not including database name" do
-        expect(mysql_client).to receive(:prepare).twice do |*args|
+        expect(mysql_client).to receive(:prepare).at_least(:once) do |*args|
           query = args.shift
           if query.match?("PRIMARY KEY")
             pk_statement
@@ -379,8 +378,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(select_all_statement).to receive(:execute) { select_all_result }
-        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+        expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything) { {"id" => 12, "some_field" => "yada yada"} }
 
         cmd = subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to_not include(a_string_matching(/production_database_name\.addresses/))
@@ -398,7 +396,7 @@ describe MysqlConnection do
     context "when database_name is provided" do
       subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
       it "queries existing rows" do
-        expect(mysql_client).to receive(:prepare).twice do |*args|
+        expect(mysql_client).to receive(:prepare).at_least(:once) do |*args|
           query = args.shift
           if query.match?("PRIMARY KEY")
             pk_statement
@@ -412,8 +410,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(select_all_statement).to receive(:execute) { select_all_result }
-        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+        expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything) { {"id" => 12, "some_field" => "yada yada"} }
 
         cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to include(a_string_matching(/production_database_name\.addresses/))
@@ -422,7 +419,7 @@ describe MysqlConnection do
     context "when database_name is not provided" do
       subject { MysqlConnection.new(client: mysql_client, logger: logger) }
       it "queries existing rows" do
-        expect(mysql_client).to receive(:prepare).twice do |*args|
+        expect(mysql_client).to receive(:prepare).once do |*args|
           query = args.shift
           if query.match?("PRIMARY KEY")
             pk_statement
@@ -436,8 +433,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(select_all_statement).to receive(:execute) { select_all_result }
-        expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+        expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything) { {"id" => 12, "some_field" => "yada yada"} }
 
         cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to_not include(a_string_matching(/production_database_name\.addresses/))
@@ -446,7 +442,7 @@ describe MysqlConnection do
     context "when sql query throws an exception" do
       subject { MysqlConnection.new(client: mysql_client, logger: logger) }
       it "returns an empty command list" do
-        expect(mysql_client).to receive(:prepare).twice do |*args|
+        expect(mysql_client).to receive(:prepare).once do |*args|
           query = args.shift
           if query.match?("PRIMARY KEY")
             pk_statement
@@ -460,8 +456,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(select_all_statement).to receive(:execute).at_least(:once).and_raise("invalid date")
-        # expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
+        expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything).at_least(:once).and_raise("invalid date")
 
         cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to be_empty
@@ -478,7 +473,7 @@ describe MysqlConnection do
 
     subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
     it "queries existing rows" do
-      expect(mysql_client).to receive(:prepare).twice do |*args|
+      expect(mysql_client).to receive(:prepare).at_least(:once) do |*args|
         query = args.shift
         if query.match?("PRIMARY KEY")
           pk_statement
@@ -492,8 +487,7 @@ describe MysqlConnection do
       expect(pk_statement).to receive(:execute) { pk_result }
       expect(pk_result).to receive(:map) { ["id"] }
 
-      expect(select_all_statement).to receive(:execute) { select_all_result }
-      expect(select_all_result).to receive(:map) { [{"id" => 12, "some_field" => "yada yada"}] }
+      expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything).at_least(:once).and_raise("invalid date")
 
       subject.generate_update(row_checksum.table_name, row_checksum.row_id)
     end

@@ -198,7 +198,7 @@ class MysqlConnection
   end
 
   def generate_delete(table_name, row_id)
-    statement = select_all_query(table_name)
+    statement = select_all_raw_query(table_name, row_id)
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
     end
@@ -210,7 +210,7 @@ class MysqlConnection
     end
 
     @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).each do |row|
+      @client.query(statement, cast: false).each do |row|
         wc = row.map do |k, v|
           if v.nil?
             %(#{k} IS NULL)
@@ -226,7 +226,7 @@ class MysqlConnection
   end
 
   def generate_insert(table_name, row_id)
-    statement = select_all_query(table_name)
+    statement = select_all_raw_query(table_name, row_id)
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
     end
@@ -234,12 +234,14 @@ class MysqlConnection
     cmd = []
 
     fall_back = proc do |err|
-      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err.inspect}))
+      # and print it to STDERR too
+      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err.inspect}))
       cmd
     end
 
     @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).each do |row|
+      @client.query(statement, cast: false).each do |row|
         cols = []
         vals = []
         row.each do |k, v|
@@ -264,18 +266,20 @@ class MysqlConnection
   # TablePair::generate_update instead.
   def generate_update(table_name, row_id)
     primary_key = primary_key(table_name)
-    statement = select_all_query(table_name)
+    statement = select_all_raw_query(table_name, row_id)
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
     end
 
     fall_back = proc do |err|
       @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      # and print it to STDERR too
+      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
       []
     end
 
     cmd = @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).map do |row|
+      @client.query(statement, cast: false).map do |row|
         pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
           val = if v.nil?
             "NULL"
@@ -300,6 +304,8 @@ class MysqlConnection
 
     fall_back = proc do |err|
       @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      # and print it to STDERR too
+      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
       rows
     end
 
@@ -410,11 +416,17 @@ class MysqlConnection
 
   memoize :row_checksum_query
 
+  def select_all_raw_query(table_name, row_id)
+    primary_key = primary_key(table_name)
+    %(select * from #{table_name} where #{primary_key} = '#{row_id}')
+  end
+
+  memoize :select_all_raw_query
+
   def select_all_query(table_name)
     primary_key = primary_key(table_name)
     query = %(select * from #{table_name} where #{primary_key} = ?)
     @client.prepare(query)
   end
-
   memoize :select_all_query
 end

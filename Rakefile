@@ -1,13 +1,17 @@
 require "rake/clean"
 require "rspec/core/rake_task"
 
+LOGFILES = FileList.glob("logs/*")
+LOGFILES << FileList.glob("*.log")
+LOGFILES << FileList.glob("*.log.age")
+LOGFILES << FileList.glob("spec/*.log")
+LOGFILES << FileList.glob("spec/*.log.age")
+LOGFILES.flatten!
+
 CLEAN << "spec/output"
-CLEAN << "spec/output.log"
 CLEAN << "spec/reports"
-CLEAN << "rspec.log"
 CLEAN << "build"
-CLEAN << "logs/"
-CLEAN << "*.log"
+LOGFILES.each { |f| CLEAN << f }
 
 task :test do
   RSpec::Core::RakeTask.new(:spec) do |t|
@@ -17,4 +21,4 @@ task :test do
   Rake::Task["spec"].execute
 end
 
-task :default => :test
+task default: :test
