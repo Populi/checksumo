@@ -355,7 +355,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(select_all_statement).to receive(:execute).with(row_checksum.row_id) { select_all_result }
+        expect(select_all_statement).to receive(:execute).with(row_checksum.row_id, anything) { select_all_result }
         expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
 
         cmd = subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
@@ -461,7 +461,6 @@ describe MysqlConnection do
         expect(pk_result).to receive(:map) { ["id"] }
 
         expect(select_all_statement).to receive(:execute).at_least(:once).and_raise("invalid date")
-        # expect(select_all_result).to receive(:each).and_yield({"id" => 12, "some_field" => "yada yada"})
 
         cmd = subject.generate_insert(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to be_empty

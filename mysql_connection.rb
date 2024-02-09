@@ -210,7 +210,7 @@ class MysqlConnection
     end
 
     @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).each do |row|
+      statement.execute(row_id, cast: false).each do |row|
         wc = row.map do |k, v|
           if v.nil?
             %(#{k} IS NULL)
@@ -235,11 +235,13 @@ class MysqlConnection
 
     fall_back = proc do |err|
       @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      # and print it to STDERR too
+      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
       cmd
     end
 
     @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).each do |row|
+      statement.execute(row_id, cast: false).each do |row|
         cols = []
         vals = []
         row.each do |k, v|
@@ -271,11 +273,13 @@ class MysqlConnection
 
     fall_back = proc do |err|
       @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      # and print it to STDERR too
+      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
       []
     end
 
     cmd = @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).map do |row|
+      statement.execute(row_id, cast: false).map do |row|
         pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
           val = if v.nil?
             "NULL"
@@ -300,6 +304,8 @@ class MysqlConnection
 
     fall_back = proc do |err|
       @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      # and print it to STDERR too
+      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
       rows
     end
 
