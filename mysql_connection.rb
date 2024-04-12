@@ -91,6 +91,20 @@ class MysqlConnection
     @table_names << table_names
   end
 
+  def sql_escape(string)
+    if /\`([A-Za-z0-9_]+)\`/ =~ string
+      # This one has already been escaped, let it go..
+      logger.debug("no need to sql-escape string: '#{string}'")
+      string
+    else
+      etn = '`' + string.to_s + '`'
+      logger.debug("sql-escaped string: '#{etn}'")
+      etn
+    end
+  end
+  # this gets called a LOT
+  memoize :sql_escape
+
   def search
     query = <<~QUERY
         SELECT t.table_name as TableName, group_concat(k.column_name separator ', ') as PrimaryKey
@@ -112,7 +126,7 @@ class MysqlConnection
   end
 
   def columns(table_name)
-    query = %(SELECT * FROM #{table_name} LIMIT 1;)
+    query = %(SELECT * FROM #{sql_escape(table_name)} LIMIT 1;)
     result = @executor.execute { @client.query(query) }
     result.fields.sort
   end
@@ -134,7 +148,7 @@ class MysqlConnection
 
   def max_row_id(table_name)
     primary_key = primary_key(table_name)
-    query = %{SELECT COALESCE(max(#{primary_key}), "") as max from #{table_name};}
+    query = %{SELECT COALESCE(max(#{primary_key}), "") as max from #{sql_escape(table_name)};}
     maxes = @executor.execute do
       @client.query(query).map do |row|
         row["max"]
@@ -147,7 +161,7 @@ class MysqlConnection
 
   def min_row_id(table_name)
     primary_key = primary_key(table_name)
-    query = %{SELECT COALESCE(min(#{primary_key}), "") as min from #{table_name};}
+    query = %{SELECT COALESCE(min(#{primary_key}), "") as min from #{sql_escape(table_name)};}
     maxes = @executor.execute do
       @client.query(query).map do |row|
         row["min"]
@@ -268,7 +282,7 @@ class MysqlConnection
     primary_key = primary_key(table_name)
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
-      table_name = "#{@database_name}.#{table_name}"
+      table_name = "#{@database_name}.#{sql_escape(table_name)}"
     end
 
     fall_back = proc do |err|
@@ -289,7 +303,7 @@ class MysqlConnection
           %(#{k} = #{val})
         end
         %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
-         WHERE #{primary_key} = '#{row_id}';)
+         WHERE #{table_name} = '#{row_id}';)
       end
     end
     @logger.debug("generated insert command #{cmd}")
@@ -363,8 +377,8 @@ class MysqlConnection
         COALESCE(CRC32(group_concat(t.CHECKSUM separator '|')), 0) as CHECKSUM
 
         FROM(SELECT #{pk}, CRC32(CONCAT(#{col_str})) as CHECKSUM
-          FROM #{table_name}
-          WHERE #{table_name}.#{pk} >= ? and #{table_name}.#{pk} <= ?) as t;
+          FROM #{sql_escape(table_name)}
+          WHERE #{sql_escape(table_name)}.#{pk} >= ? and #{sql_escape(table_name)}.#{pk} <= ?) as t;
     QUERY
 
     @client.prepare(query)
@@ -386,8 +400,8 @@ class MysqlConnection
         COALESCE(CRC32(group_concat(t.CHECKSUM separator '|')), 0) as CHECKSUM
 
         FROM(SELECT #{pk}, CRC32(CONCAT(#{col_str})) as CHECKSUM
-          FROM #{table_name}
-          WHERE #{table_name}.#{pk} >= ?
+          FROM #{sql_escape(table_name)}
+          WHERE #{sql_escape(table_name)}.#{pk} >= ?
           LIMIT ?) as t;
     QUERY
 
@@ -405,7 +419,7 @@ class MysqlConnection
 
     query = <<~QUERY
       SELECT #{pk} as ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
-      FROM #{table_name}
+      FROM #{sql_escape(table_name)}
       WHERE #{pk} >= ? and #{pk} <= ?
     QUERY
 
@@ -418,14 +432,14 @@ class MysqlConnection
 
   def select_all_raw_query(table_name, row_id)
     primary_key = primary_key(table_name)
-    %(select * from #{table_name} where #{primary_key} = '#{row_id}')
+    %(select * from #{sql_escape(table_name)} where #{primary_key} = '#{row_id}')
   end
 
   memoize :select_all_raw_query
 
   def select_all_query(table_name)
     primary_key = primary_key(table_name)
-    query = %(select * from #{table_name} where #{primary_key} = ?)
+    query = %(select * from #{sql_escape(table_name)} where #{primary_key} = ?)
     @client.prepare(query)
   end
   memoize :select_all_query
