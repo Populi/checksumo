@@ -35,6 +35,11 @@ module LogHelper
       @@loggers["root_logger"]
     end
 
+    def self.layout
+      Logging::Layouts::Parseable.new(:style => :yaml,
+                                      :items => %w[timestamp level logger file line message])
+    end
+
     def self.init(opts = {})
       log_dir = opts.fetch(:directory, File.absolute_path("."))
       @@directory = File.absolute_path(log_dir)
@@ -46,8 +51,9 @@ module LogHelper
       root_logger = Logging.logger[name]
       root_logger.level = opts.fetch(:level, :info)
 
-      file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/checksumo{{.%d}}.log", age: "daily")
+      file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/checksumo{{.%d}}.log", age: "daily", layout: layout)
       root_logger.add_appenders(file_appender)
+      root_logger.caller_tracing = true
 
       @@loggers[name] = root_logger
     end
@@ -61,11 +67,12 @@ module LogHelper
       directory = File.absolute_path(log_dir)
       FileUtils.mkdir_p directory unless File.exist? File.absolute_path(directory)
 
-      file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/#{name}{{.%d}}.log", age: "daily")
+      file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/#{name}{{.%d}}.log", age: "daily", layout: layout)
 
       log = Logging.logger["#{name}_logger"]
-      log.level = opts.fetch(:level, :info)
+      log.level = level
       log.add_appenders(file_appender)
+      log.caller_tracing = true
 
       @@loggers[name] = log
 

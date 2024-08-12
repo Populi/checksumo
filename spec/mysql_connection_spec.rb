@@ -378,7 +378,7 @@ describe MysqlConnection do
         expect(pk_statement).to receive(:execute) { pk_result }
         expect(pk_result).to receive(:map) { ["id"] }
 
-        expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything) { {"id" => 12, "some_field" => "yada yada"} }
+        expect(mysql_client).to receive(:query).at_least(:once).with(/select \* from .+ where .+/i, anything) { {"id" => 12, "some_field" => "yada yada"} }
 
         cmd = subject.generate_delete(row_checksum.table_name, row_checksum.row_id)
         expect(cmd).to_not include(a_string_matching(/production_database_name\.addresses/))

@@ -1,4 +1,8 @@
-# Overview
+[![GitHub license](https://img.shields.io/github/license/Populi/cronken.svg)](https://github.com/Populi/cronken/blob/master/LICENSE)
+
+# Checksumo
+
+![Checksumo Logo](checksumo_logo.png) 
 
 `checksumo` is a command-line tool for checking replication status between database replication pairs.
 It works by generating checksums for Table "chunks" and comparing them between master and replica instances.

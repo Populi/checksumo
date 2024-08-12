@@ -25,6 +25,7 @@ class ChunkChecksum < AbstractChecksum
     @count = opts.fetch(:count, 0)
     @min = opts.fetch(:min, "")
     @max = opts.fetch(:max, "")
+    @crc32 = @crc32.to_i
   end
 
   def equal?(other)
@@ -92,13 +93,16 @@ class MysqlConnection
   end
 
   def sql_escape(string)
-    if /\`([A-Za-z0-9_]+)\`/ =~ string
+    str = string.to_s
+    str.gsub(/\\?"/, '\"')
+
+    if /\`([A-Za-z0-9_]+)\`/ =~ str
       # This one has already been escaped, let it go..
-      logger.debug("no need to sql-escape string: '#{string}'")
-      string
+      logger.debug("no need to sql-escape str: '#{str}'")
+      str
     else
-      etn = '`' + string.to_s + '`'
-      logger.debug("sql-escaped string: '#{etn}'")
+      etn = '`' + str.to_s + '`'
+      logger.debug("sql-escaped str: '#{etn}'")
       etn
     end
   end
@@ -136,7 +140,10 @@ class MysqlConnection
   def primary_key(table_name, _opts = {})
     @primary_key_cache.fetch(table_name) do |name|
       statement = primary_key_query
-      result_set = @executor.execute { statement.execute(name) }
+      result_set = @executor.execute {
+        @logger.debug("executing primary key query: #{statement.inspect}")
+        statement.execute(name)
+      }
       cols = result_set.map do |row|
         row["COLUMN_NAME"]
       end
@@ -171,6 +178,19 @@ class MysqlConnection
   end
 
   memoize :min_row_id
+
+  def row_count(table_name)
+    primary_key = primary_key(table_name)
+    query = %{SELECT COUNT(#{sql_escape(primary_key)}) AS ROW_COUNT FROM #{sql_escape(table_name)};}
+    lines = @executor.execute do
+      @client.query(query).map do |row|
+        row["ROW_COUNT"]
+      end
+    end
+    lines.first
+  end
+
+memoize :row_count
 
   def row_checksum(table_name, opts = {})
     row_id = opts.fetch(:row_id, nil)
@@ -227,9 +247,9 @@ class MysqlConnection
       @client.query(statement, cast: false).each do |row|
         wc = row.map do |k, v|
           if v.nil?
-            %(#{k} IS NULL)
+            %(#{sql_escape(k)} IS NULL)
           else
-            %(#{k} = '#{v}')
+            %(#{sql_escape( k)} = "#{v.gsub(/\\?"/, "\\\"")}")
           end
         end
         cmd << %(DELETE FROM #{table_name} WHERE #{wc.join(" \n\tAND ")}\n;)
@@ -370,6 +390,8 @@ class MysqlConnection
 
     pk = primary_key(table_name)
 
+    @logger.debug("Primary key for #{table_name}: #{pk}")
+
     query = <<~QUERY
       SELECT COALESCE(min(t.#{pk}), "") as START,
         COALESCE(max(t.#{pk}), "") as END,
@@ -380,6 +402,7 @@ class MysqlConnection
           FROM #{sql_escape(table_name)}
           WHERE #{sql_escape(table_name)}.#{pk} >= ? and #{sql_escape(table_name)}.#{pk} <= ?) as t;
     QUERY
+    @logger.debug("bounded checksum query: #{query}")
 
     @client.prepare(query)
   end
@@ -404,6 +427,7 @@ class MysqlConnection
           WHERE #{sql_escape(table_name)}.#{pk} >= ?
           LIMIT ?) as t;
     QUERY
+    @logger.debug("unbounded checksum query: #{query}")
 
     @client.prepare(query)
   end
@@ -423,7 +447,7 @@ class MysqlConnection
       WHERE #{pk} >= ? and #{pk} <= ?
     QUERY
 
-    @logger.info("generated row checksum query: #{query}")
+    @logger.debug("generated row checksum query: #{query}")
 
     @client.prepare(query)
   end

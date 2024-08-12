@@ -3,7 +3,8 @@ require "logging"
 require_relative "log_helper"
 require_relative "mysql_connection"
 
-DEFAULT_CHUNK_SIZE = 1024
+# We originally used 1024 here, but the larger chunks seem to be missing diffs.
+DEFAULT_CHUNK_SIZE = 100
 
 # Encapsulate comparison logic
 class AbstractComparison
@@ -91,6 +92,12 @@ class Table
 
   memoize :min_row_id
 
+  def row_count
+    @conn.row_count(@name)
+  end
+
+  memoize :row_count
+
   def chunk_checksum(opts = {})
     @conn.chunk_checksum(@name, opts)
   end
@@ -128,9 +135,25 @@ class TablePair
     end
   end
 
+  def min_row_id
+    mmin = @master.min_row_id
+    rmin = @replica.min_row_id
+    mmin <= rmin ? mmin : rmin
+  end
+
+  def max_row_id
+    mmax = @master.max_row_id
+    rmax = @replica.max_row_id
+    mmax >= rmax ? mmax : rmax
+  end
+
   def delta(opts = {})
+    # First check the row count on either side
+    row_count_diff = self.row_count_diff
+    @logger.info("row count mismatch: #{row_count_diff}") unless row_count_diff[:diff] == 0
+
     ccs = compare_chunks(opts)
-    if ccs.empty?
+    if ccs.empty? and row_count_diff[:diff] == 0
       @logger.debug("no chunk diff on #{@table_name}, skipping row diff")
       return Hash[]
     end
@@ -138,6 +161,12 @@ class TablePair
     row_diff = Hash[]
     ccs.each do |cc|
       rd = compare_rows(min: cc.master.min, max: cc.master.max)
+      row_diff.merge! rd
+    end
+
+    # There are additional rows on the replica, probably with higher id values than the master has.
+    if row_count_diff[:diff] < 0
+      rd = compare_rows(min: @replica.min_row_id, max: @replica.max_row_id)
       row_diff.merge! rd
     end
 
@@ -173,9 +202,14 @@ class TablePair
     diff = []
     primary_key = @master.primary_key
     master_chunks = master_chunks(opts)
+    @logger.debug("found #{master_chunks.count} master chunks")
+
     master_chunks.each do |mch|
       # This should only be one chunk, but it's technically a list, so we'll treat it like a list
+      @logger.debug("master chunk: #{mch.inspect}")
+
       @replica.chunk_checksum(min: mch.min, max: mch.max).each do |rch|
+        @logger.debug("replica chunk: #{rch.inspect}")
         next if rch.equal?(mch) # only keep checksums that are mismatched
 
         diff << ChunkComparison.new(master: mch,
@@ -228,16 +262,32 @@ class TablePair
 
   private
 
+  def row_count_diff
+    mrc = @master.row_count
+    rrc = @replica.row_count
+    diff = "#{mrc}".to_i - "#{ rrc }".to_i
+    {
+      table_name: @table_name,
+      master: mrc,
+      replica: rrc,
+      diff: diff
+    }
+  end
+
   def master_chunks(_opts = {})
     chunks = []
     row_id = @master.min_row_id
+    @logger.info("Min Row ID #{@master.min_row_id}; Max Row ID: #{@master.max_row_id}")
     loop do
       @master.chunk_checksum(min: row_id, limit: @chunk_size).each do |mch|
         chunks.unshift(mch)
       end
-      @logger.debug("chunks: #{chunks}")
+      @logger.debug("chunk count: #{chunks.count}")
       row_id = chunks.first.max
-      break if chunks.first.count < @chunk_size
+      @logger.debug("master chunks first max: #{chunks.first.max}, count: #{chunks.first.count}, @master.max_row_id: #{@master.max_row_id}")
+
+      # TODO make this test better
+      return chunks.reverse if chunks.first.max.eql? @master.max_row_id
     end
 
     chunks.reverse

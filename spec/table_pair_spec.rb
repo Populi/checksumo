@@ -36,6 +36,7 @@ describe "TablePair" do
       expect(subject.replica).to be_a_kind_of(Table)
     end
   end
+
   describe "#compare_chunks" do
     let(:count) { 15 }
     subject { TablePair.new(table_name, mconn, rconn, chunk_size: 99, logger: logger) }
@@ -60,6 +61,7 @@ describe "TablePair" do
       subject.compare_chunks
     end
   end
+
   describe "#compare_rows" do
     let(:min) { 123 }
     let(:max) { 125 }

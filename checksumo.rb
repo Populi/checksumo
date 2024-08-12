@@ -46,7 +46,7 @@ class Parser
     args[:deadline] = Time.now + args[:timeout] * 60
 
     opt_parser = OptionParser.new do |opts|
-      opts.banner = "Usage: checksumo.rb [options] [tables]"
+      opts.banner = "Usage: checksumo.rb [options] [table names]"
 
       opts.on("-h", "--help", "Print help message") do
         puts opts
@@ -55,10 +55,10 @@ class Parser
 
       opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
         args[:verbose] = if v
-          :debug
-        else
-          :warn
-        end
+                           :debug
+                         else
+                           :warn
+                         end
       end
 
       opts.on("--timeout=DURATION", "Timeout in minutes [#{args[:timeout]}]") do |min|
@@ -95,7 +95,6 @@ class Parser
       opts.on("--master-password=USERNAME", 'Master DB user password [$ENV["DB_PASS"]]') do |n|
         args[:master_password] = n
       end
-
       opts.on("--replica-host=HOSTNAME", "Replica DB hostname [#{args[:replica_hostname]}]") do |n|
         args[:replica_hostname] = n
       end
@@ -145,6 +144,8 @@ def setup(opts = {})
     database: opts[:database_name],
     init_command: init_command
   )
+
+  @logger.debug("table names: #{opts.fetch(:table_names, [])}")
 
   ReplicationWatcher.new(
     master: MysqlConnection.new(client: master_client, database_name: opts[:database_name]),
@@ -205,8 +206,10 @@ def main(args)
   options[:table_names] = table_names
 
   # Ensure logger is logging at the correct level
-  LogHelper::LogConfig.init(level: options.fetch(:log_level, :info), directory: options[:log_dir])
+  log_level = options.fetch(:verbose, :info)
+  LogHelper::LogConfig.init(level: log_level, directory: options[:log_dir])
   logger = logger(name: "checksumo")
+  logger.debug("logger: #{logger.inspect}")
 
   # Set a timeout alarm before we do anything else
   set_alarm(options)
