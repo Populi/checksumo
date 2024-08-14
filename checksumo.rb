@@ -25,6 +25,7 @@ class Parser
   def self.parse(options, opts = {})
     defaults = opts.fetch(:defaults)
     args = {
+      chunk_size: 1024,
       master_hostname: "127.0.0.1",
       master_port: 3060,
       master_user_name: ENV["DB_USER"],
@@ -77,6 +78,10 @@ class Parser
           puts "watch mode must be one of [CHUNK_SUMMARY, ROW_DIFF, WAIT]"
           exit
         end
+      end
+
+      opts.on("--chunk-size=SIZE", "Table chunk size for checksum comparisons [#{args[:chunk_size]}]") do |size|
+        args[:chunk_size] = size.to_i
       end
 
       opts.on("--database=DB_NAME", "Database name REQUIRED") do |n|
@@ -152,7 +157,8 @@ def setup(opts = {})
     replica: MysqlConnection.new(client: replica_client, database_name: opts[:database_name]),
     database_name: opts[:database_name],
     table_pairs: [],
-    table_names: opts.fetch(:table_names, [])
+    table_names: opts.fetch(:table_names, []),
+    chunk_size: opts[:chunk_size]
   )
 end
 

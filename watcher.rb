@@ -14,6 +14,7 @@ class ReplicationWatcher
   attr_accessor :database_name, :master, :replica, :table_pairs
 
   def initialize(opts = {})
+    @chunk_size = opts.fetch(:chunk_size)
     @master = opts.fetch(:master)
     @replica = opts.fetch(:replica)
     @database_name = opts.fetch(:database_name, nil)
@@ -27,7 +28,7 @@ class ReplicationWatcher
     table_names.each do |n|
       next unless n.match?('^[A-Za-z_\.]+$')
       @logger.debug("adding table pair for #{n}")
-      @table_pairs << TablePair.new(n, @master, @replica, database_name: @database_name)
+      @table_pairs << TablePair.new(n, @master, @replica, database_name: @database_name, chunk_size: @chunk_size)
     end
 
     @logger.debug("initialized ReplicationWatcher: #{self}")
