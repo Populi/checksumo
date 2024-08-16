@@ -67,11 +67,12 @@ module LogHelper
       directory = File.absolute_path(log_dir)
       FileUtils.mkdir_p directory unless File.exist? File.absolute_path(directory)
 
+      console_appender = Logging::Appenders::Stderr.new(level: :error, layout: layout)
       file_appender = Logging::Appenders::RollingFile.new("root_log_file", filename: "#{directory}/#{name}{{.%d}}.log", age: "daily", layout: layout)
 
       log = Logging.logger["#{name}_logger"]
       log.level = level
-      log.add_appenders(file_appender)
+      log.add_appenders(console_appender, file_appender)
       log.caller_tracing = true
 
       @@loggers[name] = log

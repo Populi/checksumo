@@ -173,6 +173,9 @@ class TablePair
     @logger.debug("returning diff: #{row_diff}")
 
     row_diff
+  rescue Exception => err
+    logger.error(%{skipping Table "#{@table_name}" because of error: #{err.backtrace} })
+    Hash[]
   end
 
   def compare_rows(opts = {})
