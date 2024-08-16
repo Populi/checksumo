@@ -14,7 +14,7 @@ class ReplicationWatcher
   attr_accessor :database_name, :master, :replica, :table_pairs
 
   def initialize(opts = {})
-    @chunk_size = opts.fetch(:chunk_size)
+    @chunk_size = opts.fetch(:chunk_size, DEFAULT_CHUNK_SIZE)
     @master = opts.fetch(:master)
     @replica = opts.fetch(:replica)
     @database_name = opts.fetch(:database_name, nil)

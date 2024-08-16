@@ -39,10 +39,11 @@ describe "TablePair" do
 
   describe "#compare_chunks" do
     let(:count) { 15 }
+    let(:max_row_id) {"12345"}
     subject { TablePair.new(table_name, mconn, rconn, chunk_size: 99, logger: logger) }
     it "calls into the master and replica connections" do
       # only called when @logger.debug?
-      allow(mconn).to receive(:max_row_id) { "12345" }
+      allow(mconn).to receive(:max_row_id) { max_row_id }
       allow(mconn).to receive(:primary_key) { "id" }
 
       # should always be called
@@ -52,7 +53,7 @@ describe "TablePair" do
         # This SHOULD be fixable within FactoryBot, but I haven't figured it out yet.
         final_limit = opts[:limit] - 1
         ccs = build_list(:chunk_checksum, count, table_name: "addresses")
-        ccs << build(:chunk_checksum, count: final_limit)
+        ccs << build(:chunk_checksum, count: final_limit, max: max_row_id)
       end
       expect(rconn).to receive(:chunk_checksum).at_least(4) do |*args|
         opts = args.pop
