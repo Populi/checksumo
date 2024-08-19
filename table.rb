@@ -3,8 +3,7 @@ require "logging"
 require_relative "log_helper"
 require_relative "mysql_connection"
 
-# We originally used 1024 here, but the larger chunks seem to be missing diffs.
-DEFAULT_CHUNK_SIZE = 100
+DEFAULT_CHUNK_SIZE = 4096
 
 # Encapsulate comparison logic
 class AbstractComparison
@@ -41,6 +40,17 @@ class ChunkComparison < AbstractComparison
     @max_row = opts[:max_row]
     @min_row = opts[:min_row]
     @table_name = opts[:table_name]
+  end
+
+  def debug_info
+    {
+      table_name: @table_name,
+      min_row: [master.min, replica.min],
+      max_row: [master.max, replica.max],
+      count: [master.count, replica.count],
+      crc32: [master.crc32, replica.crc32],
+      mismatch: compare ? "false" : "true"
+    }
   end
 end
 
@@ -213,6 +223,7 @@ class TablePair
 
       @replica.chunk_checksum(min: mch.min, max: mch.max).each do |rch|
         @logger.debug("replica chunk: #{rch.inspect}")
+
         next if rch.equal?(mch) # only keep checksums that are mismatched
 
         diff << ChunkComparison.new(master: mch,
@@ -233,7 +244,7 @@ class TablePair
         diff: diff
       }
 
-      @logger.debug("checksum diff: #{summary}")
+      @logger.debug("chunk checksum diff: #{summary.inspect}")
     end
 
     diff

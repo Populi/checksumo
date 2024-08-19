@@ -30,6 +30,18 @@ describe 'ChunkComparison' do
       end
     end
   end
+  describe '#debug_info' do
+    context 'when checksum objects are equal' do
+      let(:master_checksum) { build(:chunk_checksum, min: '12', max: '128', count: '99', crc32: 111_111) }
+      let(:replica_checksum) { build(:chunk_checksum, min: '12', max: '128', count: '99', crc32: 111_111) }
+      subject do
+        ChunkComparison.new(master: master_checksum, replica: replica_checksum)
+      end
+      it 'returns hash of comparisons' do
+        expect(subject.debug_info).to be_a(Hash)
+      end
+    end
+  end
   context 'when checksum objects are unequal' do
     # We'll trust FactoryBot to create two different checksum objects
     let(:master_checksum) { build(:chunk_checksum) }

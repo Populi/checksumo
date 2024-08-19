@@ -38,14 +38,14 @@ class ReplicationWatcher
     @table_pairs = []
     table_names.each do |t|
       @logger.debug("creating TablePair from '#{t.inspect}'")
-      @table_pairs << TablePair.new(t, @master, @replica, database_name: @database_name)
+      @table_pairs << TablePair.new(t, @master, @replica, database_name: @database_name, chunk_size: @chunk_size)
     end
     @table_pairs.uniq! { |tp| tp.table_name }
   end
 
   def search
     @master.search.each_key do |tablename|
-      @table_pairs << TablePair.new(tablename, @master, @replica, database_name: @database_name)
+      @table_pairs << TablePair.new(tablename, @master, @replica, database_name: @database_name, chunk_size: @chunk_size)
     end
   end
 

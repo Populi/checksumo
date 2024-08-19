@@ -20,12 +20,15 @@ FLAGS = Mysql2::Client::REMEMBER_OPTIONS |
   Mysql2::Client::SECURE_CONNECTION |
   Mysql2::Client::MULTI_STATEMENTS
 
+DEFAULT_GROUP_CONCAT_MAX_LENGTH = 1000000
+
 # Command-line Parser
 class Parser
   def self.parse(options, opts = {})
     defaults = opts.fetch(:defaults)
     args = {
-      chunk_size: 1024,
+      chunk_size: DEFAULT_CHUNK_SIZE,
+      group_concat_max_length: DEFAULT_GROUP_CONCAT_MAX_LENGTH,
       master_hostname: "127.0.0.1",
       master_port: 3060,
       master_user_name: ENV["DB_USER"],
@@ -53,7 +56,6 @@ class Parser
         puts opts
         exit
       end
-
       opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
         args[:verbose] = if v
                            :debug
@@ -61,33 +63,9 @@ class Parser
                            :warn
                          end
       end
-
-      opts.on("--timeout=DURATION", "Timeout in minutes [#{args[:timeout]}]") do |min|
-        args[:deadline] = Time.now + min.to_f * 60
-      end
-
-      opts.on("--wait-interval=DURATION", "Wait interval between table checks [#{args[:wait_interval]}]") do |int|
-        args[:wait_interval] = int.to_f
-      end
-
-      opts.on("--watch-mode=MODE", "Watch mode: one of (CHUNK_SUMMARY, ROW_DIFF, WAIT) [#{args[:watch_mode]}]") do |m|
-        mode = m&.upcase&.to_sym
-        if [:CHUNK_SUMMARY, :ROW_DIFF, :WAIT].include?(mode)
-          args[:watch_mode] = mode
-        else
-          puts "watch mode must be one of [CHUNK_SUMMARY, ROW_DIFF, WAIT]"
-          exit
-        end
-      end
-
-      opts.on("--chunk-size=SIZE", "Table chunk size for checksum comparisons [#{args[:chunk_size]}]") do |size|
-        args[:chunk_size] = size.to_i
-      end
-
       opts.on("--database=DB_NAME", "Database name REQUIRED") do |n|
         args[:database_name] = n
       end
-
       opts.on("--master-host=HOSTNAME", "Master DB hostname [#{args[:master_hostname]}]") do |n|
         args[:master_hostname] = n
       end
@@ -112,8 +90,29 @@ class Parser
       opts.on("--replica-password=USERNAME", 'Replica DB user password [$ENV["DB_PASS"]]') do |n|
         args[:replica_password] = n
       end
+      opts.on("--timeout=DURATION", "Timeout in minutes [#{args[:timeout]}]") do |min|
+        args[:deadline] = Time.now + min.to_f * 60
+      end
+      opts.on("--wait-interval=DURATION", "Wait interval between table checks [#{args[:wait_interval]}]") do |int|
+        args[:wait_interval] = int.to_f
+      end
+      opts.on("--watch-mode=MODE", "Watch mode: one of (CHUNK_SUMMARY, ROW_DIFF, WAIT) [#{args[:watch_mode]}]") do |m|
+        mode = m&.upcase&.to_sym
+        if [:CHUNK_SUMMARY, :ROW_DIFF, :WAIT].include?(mode)
+          args[:watch_mode] = mode
+        else
+          puts "watch mode must be one of [CHUNK_SUMMARY, ROW_DIFF, WAIT]"
+          exit
+        end
+      end
       opts.on("--logdir=DIRECTORY", "Directory for output logs [./logs]") do |dir|
         args[:log_dir] = dir
+      end
+      opts.on("--chunk-size=SIZE", "Table chunk size for checksum comparisons [#{args[:chunk_size]}]") do |size|
+        args[:chunk_size] = size.to_i
+      end
+      opts.on("--group_concat_max_length=SIZE", "Group concat buffer size [#{args[:group_concat_max_length]}]") do |size|
+        args[:group_concat_max_length] = size.to_i
       end
     end
     opt_parser.parse!(options)
@@ -126,9 +125,10 @@ include LogHelper
 logger = nil
 
 def setup(opts = {})
+  gcml = opts.fetch(:group_concat_max_length, DEFAULT_GROUP_CONCAT_MAX_LENGTH)
   # reduce row- and table-locking to the least possible ACID compliance
   # see https://www.rubydoc.info/gems/mysql2/#initial-command-on-connect-and-reconnect
-  init_command = %(SET @@SESSION.transaction_isolation = 'READ-UNCOMMITTED', @SESSION.transaction_read_only = '1')
+  init_command = %(SET @@SESSION.transaction_isolation = 'READ-UNCOMMITTED', @SESSION.transaction_read_only = '1', group_concat_max_len = #{gcml})
 
   master_client = Mysql2::Client.new(
     host: opts[:master_hostname],
