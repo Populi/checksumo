@@ -89,6 +89,32 @@ describe MysqlConnection do
     end
   end
 
+  # describe "#primary_key_strategy" do
+  #   let(:result) { double(Mysql2::Result) }
+  #   let(:statement) { double(Mysql2::Statement) }
+  #
+  #   subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
+  #
+  #   context "when primary key cache is empty" do
+  #     it "queries for primary_key before querying for the max value" do
+  #       expect(mysql_client).to receive(:prepare) { statement }
+  #       expect(statement).to receive(:execute) { result }
+  #       expect(result).to receive(:map) { ["id"] }
+  #
+  #       expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
+  #
+  #       expect(subject.max_row_id("addresses")).to eq("12345667")
+  #     end
+  #   end
+  #   context "when primary key cache is populated" do
+  #     it "uses the cached primary_key when querying for the max value" do
+  #       subject.primary_key_cache["addresses"] = "id"
+  #       expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
+  #       expect(subject.max_row_id("addresses")).to eq("12345667")
+  #     end
+  #   end
+  # end
+
   describe "#search" do
     subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
     context "when the SQL query succeeds" do
@@ -162,7 +188,7 @@ describe MysqlConnection do
         expect(statement).to receive(:execute) { result }
         expect(result).to receive(:map) { ["id"] }
 
-        expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
+        expect(mysql_client).to receive(:query) { [{ "PK_MAX" => "12345667" }] }
 
         expect(subject.max_row_id("addresses")).to eq("12345667")
       end
@@ -170,7 +196,7 @@ describe MysqlConnection do
     context "when primary key cache is populated" do
       it "uses the cached primary_key when querying for the max value" do
         subject.primary_key_cache["addresses"] = "id"
-        expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
+        expect(mysql_client).to receive(:query) { [{ "PK_MAX" => "12345667" }] }
         expect(subject.max_row_id("addresses")).to eq("12345667")
       end
     end
@@ -188,14 +214,14 @@ describe MysqlConnection do
         expect(statement).to receive(:execute) { result }
         expect(result).to receive(:map) { ["id"] }
 
-        expect(mysql_client).to receive(:query) { [{"min" => "12"}] }
+        expect(mysql_client).to receive(:query) { [{ "PK_MIN" => "12" }] }
         expect(subject.min_row_id("addresses")).to eq("12")
       end
     end
     context "when primary key cache is populated" do
       it "uses the cached primary_key when querying for the min value" do
         subject.primary_key_cache["addresses"] = "id"
-        expect(mysql_client).to receive(:query) { [{"min" => "12"}] }
+        expect(mysql_client).to receive(:query) { [{ "PK_MIN" => "12" }] }
         expect(subject.min_row_id("addresses")).to eq("12")
       end
     end
@@ -277,15 +303,15 @@ describe MysqlConnection do
           # Columns, Min, and Max queries
           allow(mysql_client).to receive(:query) do |*args|
             query = args.first
-            if query.match?("as max")
+            if query.match?(/as pk_max/i)
               max_result
-            elsif query.match?("as min")
+            elsif query.match?(/as pk_min/i)
               nil
             else
               col_result
             end
           end
-          allow(max_result).to receive(:map) { [{"max" => "12345667"}] }
+          allow(max_result).to receive(:map) { [{ "pk_max" => "12345667" }] }
           allow(col_result).to receive(:fields) { %w[id some_field some_other_field another_field] }
 
           # Checksum queries

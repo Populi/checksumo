@@ -20,7 +20,7 @@ FLAGS = Mysql2::Client::REMEMBER_OPTIONS |
   Mysql2::Client::SECURE_CONNECTION |
   Mysql2::Client::MULTI_STATEMENTS
 
-DEFAULT_GROUP_CONCAT_MAX_LENGTH = 1000000
+DEFAULT_GROUP_CONCAT_MAX_LENGTH = 1_000_000
 
 # Command-line Parser
 class Parser
@@ -170,12 +170,12 @@ def set_alarm(opts = {})
   logger.info("setting timeout alarm for '#{deadline}'")
 
   Signal.trap("ALRM") do
-    logger.error("caught ALRM signal, timing out")
+    logger.error("caught SIGALRM, timing out")
 
     # message on STDOUT/STDERR too
     puts "Caught ALARM set for '#{deadline}', timing out!"
 
-    exit(1)
+    exit!(1)
   end
 
   Thread.new do
@@ -185,6 +185,23 @@ def set_alarm(opts = {})
     end
     Process.kill("ALRM", $$)
   end
+end
+
+# This probably belongs in a BEGIN block
+def set_sig_trap(_opts = {})
+  # This is pretty ugly.
+  # Each signal has to be trapped individually, so we'll just reuse a common Proc to handle them all
+  trap_handler = proc do |signo|
+    signame = Signal.signame(signo)
+
+    logger.error("Caught #{signame}, bailing out")
+    puts "Caught #{signame}, exiting!"
+
+    exit!(signo)
+  end
+
+  Signal.trap("SIGINT", trap_handler)
+  Signal.trap("SIGTERM", trap_handler)
 end
 
 def parse_config
@@ -219,6 +236,9 @@ def main(args)
 
   # Set a timeout alarm before we do anything else
   set_alarm(options)
+
+  # set up Signal Trap
+  set_sig_trap()
 
   # Create a watcher
   watcher = setup(options)

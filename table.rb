@@ -80,7 +80,7 @@ class Table
   extend Memoist
   include LogHelper
 
-  attr_accessor :conn
+  attr_accessor :conn, :primary_key_strategy
 
   def initialize(table_name, connection, opts = {})
     @conn = connection
@@ -88,6 +88,11 @@ class Table
     @logger = opts.fetch(:logger) do
       logger
     end
+    # We need a Primary Key Strategy to generate the queries for this Table.
+    # The default will assume a single-column PK.
+    # @primary_key_strategy = opts.fetch(:primary_key_strategy) do
+    #   @logger.info("generating primary key strategy: #{nil}")
+    # end
   end
 
   def max_row_id
@@ -184,15 +189,18 @@ class TablePair
 
     row_diff
   rescue Exception => err
-    logger.error(%{skipping Table "#{@table_name}" because of error: #{err.backtrace} })
+    @logger.error(%{skipping Table "#{@table_name}" because of error ("#{err.message}"): #{err.backtrace} })
     Hash[]
   end
 
   def compare_rows(opts = {})
+    @logger.debug("comparing rows, opts: #{opts.inspect}")
+
     diff = Hash[]
     @master.row_checksum(opts).each do |cs|
       diff[cs.row_id] = RowComparison.from(master: cs)
     end
+
     @replica.row_checksum(opts).each do |cs|
       mcs = diff[cs.row_id]
 
@@ -208,6 +216,8 @@ class TablePair
 
       diff[cs.row_id].replica = cs
     end
+
+    @logger.debug("Calculated RowChecksum diff: #{diff.inspect}")
     diff
   end
 
@@ -225,6 +235,7 @@ class TablePair
         @logger.debug("replica chunk: #{rch.inspect}")
 
         next if rch.equal?(mch) # only keep checksums that are mismatched
+        @logger.debug("chunk checksums misaligned on #{mch.inspect} and #{rch.inspect}")
 
         diff << ChunkComparison.new(master: mch,
           replica: rch,
@@ -300,8 +311,9 @@ class TablePair
       row_id = chunks.first.max
       @logger.debug("master chunks first max: #{chunks.first.max}, count: #{chunks.first.count}, @master.max_row_id: #{@master.max_row_id}")
 
-      # TODO make this test better
-      return chunks.reverse if chunks.first.max.eql? @master.max_row_id
+      # TODO make these tests better
+      return chunks.reverse if chunks.first.max.to_s == @master.max_row_id.to_s # stop if the max row ids match
+      return chunks.reverse if chunks.first.count < 2 # stop if our latest chunk is too small (i.e. starts and ends in the same place)
     end
 
     chunks.reverse

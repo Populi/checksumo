@@ -4,6 +4,10 @@ require "memoist"
 
 require_relative "executor"
 require_relative "log_helper"
+require_relative 'multi_column_primary_key'
+require_relative 'multi_column_query_strategy'
+require_relative 'primary_key'
+require_relative 'query_strategy'
 
 # Checksum Result
 class AbstractChecksum
@@ -109,6 +113,38 @@ class MysqlConnection
   # this gets called a LOT
   memoize :sql_escape
 
+  def primary_key_strategy(opts = {})
+    table_name = opts.fetch(:table_name) do
+      raise "Cannot create a Primary Key Strategy without a Table Name"
+    end
+
+    primary_key = self.primary_key(table_name)
+    if primary_key.match?(/(::)|(,\s*)/)
+      logger.debug("creating multi-column primary key strategy for #{table_name}, primary key: #{primary_key}")
+      MultiColumnPrimaryKey.new(column_name: primary_key, table_name: table_name)
+    else
+      logger.debug("creating simple primary key strategy for #{table_name}, primary key: #{primary_key}")
+      PrimaryKey.new(column_name: primary_key, table_name: table_name)
+    end
+  end
+
+  memoize :primary_key_strategy
+
+  def checksum_query_strategy(opts = {})
+    table_name = opts.fetch(:table_name) do
+      raise "Cannot create a Primary Key Strategy without a Table Name"
+    end
+    pks = primary_key_strategy(table_name: table_name)
+
+    if pks.is_a?(MultiColumnPrimaryKey)
+      MultiColumnQueryStrategy.new()
+    else
+      QueryStrategy.new()
+    end
+  end
+
+  memoize :checksum_query_strategy
+
   def search
     query = <<~QUERY
         SELECT t.table_name as TableName, group_concat(k.column_name separator ', ') as PrimaryKey
@@ -122,7 +158,7 @@ class MysqlConnection
 
     @executor.execute do
       @client.query(query).each do |row|
-        @primary_key_cache[row["TableName"]] = row["PrimaryKey"] unless row["PrimaryKey"].match?(",")
+        @primary_key_cache[row["TableName"]] = row["PrimaryKey"] # unless row["PrimaryKey"].match?(",")
       end
     end
 
@@ -134,7 +170,6 @@ class MysqlConnection
     result = @executor.execute { @client.query(query) }
     result.fields.sort
   end
-
   memoize :columns
 
   def primary_key(table_name, _opts = {})
@@ -150,38 +185,38 @@ class MysqlConnection
       cols.join("::")
     end
   end
-
   memoize :primary_key # ? this might not be worth memoizing
 
   def max_row_id(table_name)
-    primary_key = primary_key(table_name)
-    query = %{SELECT COALESCE(max(#{primary_key}), "") as max from #{sql_escape(table_name)};}
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.max_query(table_name: table_name, pks: pks)
     maxes = @executor.execute do
       @client.query(query).map do |row|
-        row["max"]
+        row["PK_MAX"]
       end
     end
     maxes.first
   end
-
   memoize :max_row_id
 
   def min_row_id(table_name)
-    primary_key = primary_key(table_name)
-    query = %{SELECT COALESCE(min(#{primary_key}), "") as min from #{sql_escape(table_name)};}
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.min_query(table_name: table_name, pks: pks)
     maxes = @executor.execute do
       @client.query(query).map do |row|
-        row["min"]
+        row["PK_MIN"]
       end
     end
     maxes.first
   end
-
   memoize :min_row_id
 
   def row_count(table_name)
-    primary_key = primary_key(table_name)
-    query = %{SELECT COUNT(#{sql_escape(primary_key)}) AS ROW_COUNT FROM #{sql_escape(table_name)};}
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.min_query(table_name: table_name, pks: pks)
     lines = @executor.execute do
       @client.query(query).map do |row|
         row["ROW_COUNT"]
@@ -190,7 +225,7 @@ class MysqlConnection
     lines.first
   end
 
-memoize :row_count
+  memoize :row_count
 
   def row_checksum(table_name, opts = {})
     row_id = opts.fetch(:row_id, nil)
@@ -204,6 +239,7 @@ memoize :row_count
       result = @executor.execute { statement.execute(min, max) }
     end
     result.map do |row|
+      @logger.debug("RowChecksum row: #{row.inspect}")
       RowChecksum.new(table_name: table_name, row_id: row["ROW_ID"], crc32: row["CHECKSUM"], primary_key: primary_key)
     end
   end
@@ -231,6 +267,7 @@ memoize :row_count
     end
   end
 
+  # TODO - does this need to be specialized for multi-column PK?
   def generate_delete(table_name, row_id)
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
@@ -259,6 +296,7 @@ memoize :row_count
     cmd
   end
 
+  # TODO - does this need to be specialized for multi-column PK?
   def generate_insert(table_name, row_id)
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
@@ -295,6 +333,8 @@ memoize :row_count
     cmd
   end
 
+  # TODO - does this need to be specialized for multi-column PK?
+  #
   # this is probably the more correct generate_update implementation
   # because of performance with heavily indexed tables, we'll use
   # TablePair::generate_update instead.
@@ -380,90 +420,46 @@ memoize :row_count
 
     @client.prepare(query)
   end
-
   memoize :primary_key_query
 
   def chunk_checksum_query_bounded(table_name)
-    col_str = columns(table_name).map do |col|
-      %{COALESCE(#{table_name}.#{col}, "")}
-    end.join(", ")
-
-    pk = primary_key(table_name)
-
-    @logger.debug("Primary key for #{table_name}: #{pk}")
-
-    query = <<~QUERY
-      SELECT COALESCE(min(t.#{pk}), "") as START,
-        COALESCE(max(t.#{pk}), "") as END,
-        COALESCE(count(t.#{pk}), 0) as COUNT,
-        COALESCE(CRC32(group_concat(t.CHECKSUM separator '|')), 0) as CHECKSUM
-
-        FROM(SELECT #{pk}, CRC32(CONCAT(#{col_str})) as CHECKSUM
-          FROM #{sql_escape(table_name)}
-          WHERE #{sql_escape(table_name)}.#{pk} >= ? and #{sql_escape(table_name)}.#{pk} <= ?) as t;
-    QUERY
-    @logger.debug("bounded checksum query: #{query}")
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.chunk_checksum_query_bounded(table_name: table_name, pks: pks, columns: columns(table_name))
 
     @client.prepare(query)
   end
-
   memoize :chunk_checksum_query_bounded
 
   def chunk_checksum_query_unbounded(table_name)
-    col_str = columns(table_name).map do |col|
-      %{COALESCE(#{table_name}.#{col}, "")}
-    end.join(", ")
-
-    pk = primary_key(table_name)
-
-    query = <<~QUERY
-      SELECT COALESCE(min(t.#{pk}), "") as START,
-        COALESCE(max(t.#{pk}), "") as END,
-        COALESCE(count(t.#{pk}), 0) as COUNT,
-        COALESCE(CRC32(group_concat(t.CHECKSUM separator '|')), 0) as CHECKSUM
-
-        FROM(SELECT #{pk}, CRC32(CONCAT(#{col_str})) as CHECKSUM
-          FROM #{sql_escape(table_name)}
-          WHERE #{sql_escape(table_name)}.#{pk} >= ?
-          LIMIT ?) as t;
-    QUERY
-    @logger.debug("unbounded checksum query: #{query}")
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.chunk_checksum_query_unbounded(table_name: table_name, pks: pks, columns: columns(table_name))
 
     @client.prepare(query)
   end
-
   memoize :chunk_checksum_query_unbounded
 
   def row_checksum_query(table_name)
-    col_str = columns(table_name).map do |col|
-      %{COALESCE(#{table_name}.#{col}, "")}
-    end.join(", ")
-
-    pk = primary_key(table_name)
-
-    query = <<~QUERY
-      SELECT #{pk} as ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
-      FROM #{sql_escape(table_name)}
-      WHERE #{pk} >= ? and #{pk} <= ?
-    QUERY
-
-    @logger.debug("generated row checksum query: #{query}")
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.row_checksum_query(table_name: table_name, pks: pks, columns: columns(table_name))
 
     @client.prepare(query)
   end
-
   memoize :row_checksum_query
 
   def select_all_raw_query(table_name, row_id)
-    primary_key = primary_key(table_name)
-    %(select * from #{sql_escape(table_name)} where #{primary_key} = '#{row_id}')
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    qs.select_all_raw_query(table_name: table_name, pks: pks, row_id: row_id)
   end
-
   memoize :select_all_raw_query
 
   def select_all_query(table_name)
-    primary_key = primary_key(table_name)
-    query = %(select * from #{sql_escape(table_name)} where #{primary_key} = ?)
+    qs = checksum_query_strategy(table_name: table_name)
+    pks = primary_key_strategy(table_name: table_name)
+    query = qs.select_all_query(table_name: table_name, pks: pks)
     @client.prepare(query)
   end
   memoize :select_all_query
