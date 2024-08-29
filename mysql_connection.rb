@@ -190,7 +190,7 @@ class MysqlConnection
   def max_row_id(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.max_query(table_name: table_name, pks: pks)
+    query = qs.max_query(table_name: table_name, primary_key: pks)
     maxes = @executor.execute do
       @client.query(query).map do |row|
         row["PK_MAX"]
@@ -203,7 +203,7 @@ class MysqlConnection
   def min_row_id(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.min_query(table_name: table_name, pks: pks)
+    query = qs.min_query(table_name: table_name, primary_key: pks)
     maxes = @executor.execute do
       @client.query(query).map do |row|
         row["PK_MIN"]
@@ -216,7 +216,7 @@ class MysqlConnection
   def row_count(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.min_query(table_name: table_name, pks: pks)
+    query = qs.min_query(table_name: table_name, primary_key: pks)
     lines = @executor.execute do
       @client.query(query).map do |row|
         row["ROW_COUNT"]
@@ -267,7 +267,6 @@ class MysqlConnection
     end
   end
 
-  # TODO - does this need to be specialized for multi-column PK?
   def generate_delete(table_name, row_id)
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
@@ -296,7 +295,6 @@ class MysqlConnection
     cmd
   end
 
-  # TODO - does this need to be specialized for multi-column PK?
   def generate_insert(table_name, row_id)
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
@@ -333,7 +331,6 @@ class MysqlConnection
     cmd
   end
 
-  # TODO - does this need to be specialized for multi-column PK?
   #
   # this is probably the more correct generate_update implementation
   # because of performance with heavily indexed tables, we'll use
@@ -425,7 +422,7 @@ class MysqlConnection
   def chunk_checksum_query_bounded(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.chunk_checksum_query_bounded(table_name: table_name, pks: pks, columns: columns(table_name))
+    query = qs.chunk_checksum_query_bounded(table_name: table_name, primary_key: pks, columns: columns(table_name))
 
     @client.prepare(query)
   end
@@ -434,7 +431,7 @@ class MysqlConnection
   def chunk_checksum_query_unbounded(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.chunk_checksum_query_unbounded(table_name: table_name, pks: pks, columns: columns(table_name))
+    query = qs.chunk_checksum_query_unbounded(table_name: table_name, primary_key: pks, columns: columns(table_name))
 
     @client.prepare(query)
   end
@@ -443,7 +440,7 @@ class MysqlConnection
   def row_checksum_query(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.row_checksum_query(table_name: table_name, pks: pks, columns: columns(table_name))
+    query = qs.row_checksum_query(table_name: table_name, primary_key: pks, columns: columns(table_name))
 
     @client.prepare(query)
   end
@@ -452,14 +449,14 @@ class MysqlConnection
   def select_all_raw_query(table_name, row_id)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    qs.select_all_raw_query(table_name: table_name, pks: pks, row_id: row_id)
+    qs.select_all_raw_query(table_name: table_name, primary_key: pks, row_id: row_id)
   end
   memoize :select_all_raw_query
 
   def select_all_query(table_name)
     qs = checksum_query_strategy(table_name: table_name)
     pks = primary_key_strategy(table_name: table_name)
-    query = qs.select_all_query(table_name: table_name, pks: pks)
+    query = qs.select_all_query(table_name: table_name, primary_key: pks)
     @client.prepare(query)
   end
   memoize :select_all_query

@@ -10,14 +10,14 @@ RSpec.describe 'PrimaryKeyStrategy' do
       it 'should raise an exception' do
         expect {
           _instance = PrimaryKey.new()
-        }.to raise_exception()
+        }.to raise_exception(/without a column name/)
       end
     end
     context 'when table_name is not supplied' do
       it 'should raise an exception' do
         expect {
           _instance = PrimaryKey.new(column_name: "some column name")
-        }.to raise_exception()
+        }.to raise_exception(/without a table name/)
       end
     end
     context "when required fields are provided" do

@@ -255,7 +255,7 @@ class TablePair
         diff: diff
       }
 
-      @logger.debug("chunk checksum diff: #{summary.inspect}")
+      @logger.debug("Calculated ChunkComparison diff: #{summary.inspect}")
     end
 
     diff
@@ -311,9 +311,7 @@ class TablePair
       row_id = chunks.first.max
       @logger.debug("master chunks first max: #{chunks.first.max}, count: #{chunks.first.count}, @master.max_row_id: #{@master.max_row_id}")
 
-      # TODO make these tests better
-      return chunks.reverse if chunks.first.max.to_s == @master.max_row_id.to_s # stop if the max row ids match
-      return chunks.reverse if chunks.first.count < 2 # stop if our latest chunk is too small (i.e. starts and ends in the same place)
+      break if chunks.first.max.to_s == @master.max_row_id.to_s # stop if the max row ids match
     end
 
     chunks.reverse

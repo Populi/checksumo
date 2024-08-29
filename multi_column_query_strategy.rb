@@ -13,21 +13,19 @@ class MultiColumnQueryStrategy < QueryStrategy
     super
   end
 
-  def row_id_query(table_name: nil, pks: nil)
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
+  def row_id_query(table_name: nil, primary_key: nil)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
 
-    row_id_query = pks.columns.map do |col|
+    row_id_query = primary_key.columns.map do |col|
       %{COALESCE(`#{table_name}`.#{col}, "")}
     end.join(%(, "::", ))
 
     %(CONCAT(#{row_id_query}))
   end
 
-  def max_query(table_name: nil, pks: nil)
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
-    row_id_query = row_id_query(table_name: table_name, pks: pks)
-
-    # %(SELECT max(#{row_id_query}) AS PK_MAX FROM `#{table_name}`)
+  def max_query(table_name: nil, primary_key: nil)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT max(t.ROW_ID) AS PK_MAX
@@ -36,16 +34,14 @@ class MultiColumnQueryStrategy < QueryStrategy
         FROM `#{table_name}`
       ) as t
     QUERY
-
     @logger.debug("max query: #{query}")
+
     query
   end
 
-  def min_query(table_name: nil, pks: nil)
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
-    row_id_query = row_id_query(table_name: table_name, pks: pks)
-
-    # %(SELECT min(#{row_id_query}) AS PK_MIN FROM `#{table_name}`)
+  def min_query(table_name: nil, primary_key: nil)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT min(t.ROW_ID) AS PK_MIN
@@ -54,14 +50,14 @@ class MultiColumnQueryStrategy < QueryStrategy
         FROM `#{table_name}`
       ) as t
     QUERY
-
     @logger.debug("min query: #{query}")
+
     query
   end
 
-  def row_count_query(table_name: nil, pks: nil)
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
-    row_id_query = row_id_query(table_name: table_name, pks: pks)
+  def row_count_query(table_name: nil, primary_key: nil)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     # %(SELECT count(#{row_id_query}) AS ROW_COUNT FROM `#{table_name}`)
 
@@ -72,18 +68,18 @@ class MultiColumnQueryStrategy < QueryStrategy
         FROM `#{table_name}`
       ) as t
     QUERY
-
     @logger.debug("row count query: #{query}")
+
     query
   end
 
-  def chunk_checksum_query_bounded(table_name: nil, pks: nil, columns: nil)
+  def chunk_checksum_query_bounded(table_name: nil, primary_key: nil, columns: nil)
     col_str = columns.map do |col|
       %{COALESCE(tt.#{col}, "")}
     end.join(",\n")
 
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
-    row_id_query = row_id_query(table_name: table_name, pks: pks)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT COALESCE(min(t.ROW_ID), "") as START,
@@ -96,7 +92,7 @@ class MultiColumnQueryStrategy < QueryStrategy
           FROM (
                SELECT #{row_id_query} AS ROW_ID, #{columns.join(", ")}
                FROM `#{table_name}`
-               ORDER BY #{pks.columns.join(", ")}
+               ORDER BY #{primary_key.columns.join(", ")}
           ) as tt
           WHERE tt.ROW_ID >= ? AND tt.ROW_ID <= ?
       ) as t;
@@ -106,13 +102,13 @@ class MultiColumnQueryStrategy < QueryStrategy
     query
   end
 
-  def chunk_checksum_query_unbounded(table_name: nil, pks: nil, columns: nil)
+  def chunk_checksum_query_unbounded(table_name: nil, primary_key: nil, columns: nil)
     col_str = columns.map do |col|
       %{COALESCE(tt.#{col}, "")}
     end.join(",\n")
 
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
-    row_id_query = row_id_query(table_name: table_name, pks: pks)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT COALESCE(min(t.ROW_ID), "") as START,
@@ -125,7 +121,7 @@ class MultiColumnQueryStrategy < QueryStrategy
           FROM (
                SELECT #{row_id_query} AS ROW_ID, #{columns.join(", ")}
                FROM `#{table_name}`
-               ORDER BY #{pks.columns.join(", ")}
+               ORDER BY #{primary_key.columns.join(", ")}
           ) as tt
       WHERE tt.ROW_ID >= ?
       LIMIT ?
@@ -136,49 +132,48 @@ class MultiColumnQueryStrategy < QueryStrategy
     query
   end
 
-  def row_checksum_query(table_name: nil, pks: nil, columns: nil)
+  def row_checksum_query(table_name: nil, primary_key: nil, columns: nil)
     col_str = columns.map do |col|
       %{COALESCE(tt.#{col}, "")}
     end.join(",\n")
 
-    @logger.debug("Primary key for #{table_name}: #{pks.columns.inspect}")
-    row_id_query = row_id_query(table_name: table_name, pks: pks)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
       FROM (
            SELECT #{row_id_query} AS ROW_ID, #{columns.join(", ")}
            FROM `#{table_name}`
-           ORDER BY #{pks.columns.join(", ")}
+           ORDER BY #{primary_key.columns.join(", ")}
       ) as tt
       WHERE ROW_ID >= ? AND ROW_ID <= ?
       ORDER BY tt.ROW_ID
     QUERY
-
     @logger.debug("generated row checksum query for table #{table_name}: #{query}")
 
     query
   end
 
-  def select_all_raw_query(table_name: nil, pks: nil, row_id: nil)
+  def select_all_raw_query(table_name: nil, primary_key: nil, row_id: nil)
     values = row_id.split(/::/)
     pairs = []
-    pks.columns.each_with_index do |key, index|
+    primary_key.columns.each_with_index do |key, index|
       pairs.push(%(#{key} = #{values[index]}))
     end
 
-    query = %(select * from `#{table_name}` where #{pairs.join(" AND ")})
+    query = %(SELECT * FROM `#{table_name}` WHERE #{pairs.join(" AND ")})
     @logger.debug("select all raw query: #{query}")
 
     query
   end
 
-  def select_all_query(table_name: nil, pks: nil)
-    pairs = pks.columns.map do |col|
+  def select_all_query(table_name: nil, primary_key: nil)
+    pairs = primary_key.columns.map do |col|
       %(#{col} = ?)
     end.join(" AND ")
 
-    query = %(select * from `#{table_name}` where #{pairs})
+    query = %(SELECT * FROM `#{table_name}` WHERE #{pairs})
     @logger.debug("select all query: #{query}")
 
     query
