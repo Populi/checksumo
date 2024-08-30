@@ -9,8 +9,29 @@ require_relative 'query_strategy'
 class MultiColumnQueryStrategy < QueryStrategy
   include LogHelper
 
+  attr_accessor :padding_length, :padding_char
+
+  DEFAULT_PADDING_LENGTH = 16
+  DEFAULT_PADDING_CHAR = '0'
+
   def initialize(opts = {})
     super
+    @padding_length = opts.fetch(:padding_length) do
+      DEFAULT_PADDING_LENGTH
+    end
+    @padding_char = opts.fetch(:padding_char) do
+      DEFAULT_PADDING_CHAR
+    end
+  end
+
+  def padded_row_id_query(table_name: nil, primary_key: nil)
+    @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+
+    row_id_query = primary_key.columns.map do |col|
+      %{LPAD(COALESCE(`#{table_name}`.#{col}, ""), #{padding_length}, #{padding_char})}
+    end.join(%(, "::", ))
+
+    %(CONCAT(#{row_id_query}))
   end
 
   def row_id_query(table_name: nil, primary_key: nil)
@@ -25,12 +46,14 @@ class MultiColumnQueryStrategy < QueryStrategy
 
   def max_query(table_name: nil, primary_key: nil)
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT max(t.ROW_ID) AS PK_MAX
       FROM (
-        SELECT #{row_id_query} as ROW_ID
+        SELECT #{padded_row_id_query} as ROW_ID,
+               #{row_id_query} as VISIBLE_ROW_ID
         FROM `#{table_name}`
       ) as t
     QUERY
@@ -41,12 +64,14 @@ class MultiColumnQueryStrategy < QueryStrategy
 
   def min_query(table_name: nil, primary_key: nil)
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT min(t.ROW_ID) AS PK_MIN
       FROM (
-        SELECT #{row_id_query} as ROW_ID
+        SELECT #{padded_row_id_query} as ROW_ID,
+               #{row_id_query} as VISIBLE_ROW_ID
         FROM `#{table_name}`
       ) as t
     QUERY
@@ -57,14 +82,14 @@ class MultiColumnQueryStrategy < QueryStrategy
 
   def row_count_query(table_name: nil, primary_key: nil)
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
-
-    # %(SELECT count(#{row_id_query}) AS ROW_COUNT FROM `#{table_name}`)
 
     query = <<~QUERY
       SELECT count(t.ROW_ID) AS ROW_COUNT
       FROM (
-        SELECT #{row_id_query} as ROW_ID
+        SELECT #{padded_row_id_query} as ROW_ID,
+               #{row_id_query} as VISIBLE_ROW_ID,
         FROM `#{table_name}`
       ) as t
     QUERY
@@ -79,18 +104,21 @@ class MultiColumnQueryStrategy < QueryStrategy
     end.join(",\n")
 
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT COALESCE(min(t.ROW_ID), "") as START,
-        COALESCE(max(t.ROW_ID), "") as END,
-        COALESCE(count(t.ROW_ID), 0) as COUNT,
-        COALESCE(CRC32(group_concat(t.CHECKSUM separator "|")), 0) as CHECKSUM
+             COALESCE(max(t.ROW_ID), "") as END,
+             COALESCE(min(t.VISIBLE_ROW_ID), "") as VISIBLE_START,
+             COALESCE(max(t.VISIBLE_ROW_ID), "") as VISIBLE_END,
+             COALESCE(count(t.ROW_ID), 0) as COUNT,
+             COALESCE(CRC32(group_concat(t.CHECKSUM separator "|")), 0) as CHECKSUM
 
       FROM(
-          SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
+          SELECT tt.ROW_ID AS ROW_ID, tt.VISIBLE_ROW_ID AS VISIBLE_ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
           FROM (
-               SELECT #{row_id_query} AS ROW_ID, #{columns.join(", ")}
+               SELECT #{padded_row_id_query} AS ROW_ID, #{row_id_query} AS VISIBLE_ROW_ID, #{columns.join(", ")}
                FROM `#{table_name}`
                ORDER BY #{primary_key.columns.join(", ")}
           ) as tt
@@ -108,18 +136,21 @@ class MultiColumnQueryStrategy < QueryStrategy
     end.join(",\n")
 
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT COALESCE(min(t.ROW_ID), "") as START,
-        COALESCE(max(t.ROW_ID), "") as END,
-        COALESCE(count(t.ROW_ID), 0) as COUNT,
-        COALESCE(CRC32(group_concat(t.CHECKSUM separator "|")), 0) as CHECKSUM
+             COALESCE(max(t.ROW_ID), "") as END,
+             COALESCE(min(t.VISIBLE_ROW_ID), "") as VISIBLE_START,
+             COALESCE(max(t.VISIBLE_ROW_ID), "") as VISIBLE_END,
+             COALESCE(count(t.ROW_ID), 0) as COUNT,
+             COALESCE(CRC32(group_concat(t.CHECKSUM separator "|")), 0) as CHECKSUM
 
       FROM(
-          SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
+          SELECT tt.ROW_ID AS ROW_ID, tt.VISIBLE_ROW_ID AS VISIBLE_ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
           FROM (
-               SELECT #{row_id_query} AS ROW_ID, #{columns.join(", ")}
+               SELECT #{padded_row_id_query} AS ROW_ID, #{row_id_query} AS VISIBLE_ROW_ID, #{columns.join(", ")}
                FROM `#{table_name}`
                ORDER BY #{primary_key.columns.join(", ")}
           ) as tt
@@ -138,12 +169,13 @@ class MultiColumnQueryStrategy < QueryStrategy
     end.join(",\n")
 
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
+    padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
       SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
       FROM (
-           SELECT #{row_id_query} AS ROW_ID, #{columns.join(", ")}
+           SELECT #{padded_row_id_query} AS ROW_ID, #{row_id_query} AS VISIBLE_ROW_ID, #{columns.join(", ")}
            FROM `#{table_name}`
            ORDER BY #{primary_key.columns.join(", ")}
       ) as tt

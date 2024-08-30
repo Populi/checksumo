@@ -22,13 +22,19 @@ end
 
 # Checksum for a "chunk" of a table: a list of consecutive rows
 class ChunkChecksum < AbstractChecksum
-  attr_accessor :count, :max, :min
+  attr_accessor :count, :max, :min, :visible_max, :visible_min
 
   def initialize(opts = {})
     super
     @count = opts.fetch(:count, 0)
     @min = opts.fetch(:min, "")
     @max = opts.fetch(:max, "")
+    @visible_max = opts.fetch(:visible_max) do
+      @max
+    end
+    @visible_min = opts.fetch(:visible_min) do
+      @min
+    end
     @crc32 = @crc32.to_i
   end
 
@@ -258,12 +264,20 @@ class MysqlConnection
     end
 
     result.map do |row|
-      ChunkChecksum.new(table_name: table_name,
+      ChunkChecksum.new(
+        table_name: table_name,
         crc32: row["CHECKSUM"],
         count: row["COUNT"],
         min: row["START"],
         max: row["END"],
-        primary_key: primary_key)
+        visible_min: row.fetch("VISIBLE_START") do
+          row['START']
+        end,
+        visible_max: row.fetch("VISIBLE_END") do
+          row['END']
+        end,
+        primary_key: primary_key
+      )
     end
   end
 

@@ -12,6 +12,19 @@ RSpec.describe 'MultiColumnQueryStrategy' do
       expect(subject.logger).to be_a(Logging::Logger)
     end
   end
+  describe "#padded_row_id_query" do
+    let(:table_name) { SecureRandom.uuid }
+    let(:pk_columns) { %w[id org_id country_code] }
+    let(:pk) { MultiColumnPrimaryKey.new(column_name: pk_columns.join('::'), table_name: table_name) }
+
+    subject { MultiColumnQueryStrategy.new }
+
+    it "should generate a working row_id query" do
+      expected_query = %{CONCAT(LPAD(COALESCE(`#{table_name}`.id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.org_id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.country_code, ""), 16, 0))}
+      query = subject.padded_row_id_query(table_name: table_name, primary_key: pk)
+      expect(query).to eql(expected_query)
+    end
+  end
   describe "#row_id_query" do
     let(:table_name) { SecureRandom.uuid }
     let(:pk_columns) { %w[id org_id country_code] }
@@ -20,8 +33,9 @@ RSpec.describe 'MultiColumnQueryStrategy' do
     subject { MultiColumnQueryStrategy.new }
 
     it "should generate a working row_id query" do
+      expected_query = %{CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, ""))}
       query = subject.row_id_query(table_name: table_name, primary_key: pk)
-      expect(query).to match(/COALESCE\(`#{table_name}`/)
+      expect(query).to eql(expected_query)
     end
   end
   describe "#max_query" do
@@ -63,7 +77,7 @@ RSpec.describe 'MultiColumnQueryStrategy' do
   describe "#chunk_checksum_query_bounded" do
     let(:table_name) { SecureRandom.uuid }
     let(:pk_columns) { %w[id org_id country_code] }
-    let(:columns) { %w[some_column, some_other_column] }
+    let(:columns) { %w[some_column some_other_column] }
     let(:pk) { MultiColumnPrimaryKey.new(column_name: pk_columns.join('::'), table_name: table_name) }
 
     subject { MultiColumnQueryStrategy.new }
@@ -72,32 +86,34 @@ RSpec.describe 'MultiColumnQueryStrategy' do
       expected_query = <<~EXPECTED_QUERY
         SELECT COALESCE(min(t.ROW_ID), "") as START,
                COALESCE(max(t.ROW_ID), "") as END,
+               COALESCE(min(t.VISIBLE_ROW_ID), "") as VISIBLE_START,
+               COALESCE(max(t.VISIBLE_ROW_ID), "") as VISIBLE_END,
                COALESCE(count(t.ROW_ID), 0) as COUNT,
                COALESCE(CRC32(group_concat(t.CHECKSUM separator "|")), 0) as CHECKSUM
-
         FROM(
-            SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(COALESCE(tt.some_column,, ""),
-                                                     COALESCE(tt.some_other_column, ""))) as CHECKSUM
+            SELECT tt.ROW_ID AS ROW_ID,
+                   tt.VISIBLE_ROW_ID AS VISIBLE_ROW_ID,
+                   CRC32(CONCAT(COALESCE(tt.some_column, ""), COALESCE(tt.some_other_column, ""))) as CHECKSUM
             FROM (
-                 SELECT CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, "")) AS ROW_ID, some_column,, some_other_column
-                 FROM `#{table_name}`
-                 ORDER BY id, org_id, country_code
+                 SELECT CONCAT(LPAD(COALESCE(`#{table_name}`.id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.org_id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.country_code, ""), 16, 0)) AS ROW_ID,
+                        CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, "")) AS VISIBLE_ROW_ID,
+                        some_column,
+                        some_other_column 
+                 FROM `#{table_name}`          
+                 ORDER BY id, org_id, country_code     
             ) as tt
-        WHERE tt.ROW_ID >= ? AND tt.ROW_ID <= ?
-        ) as t;
+            WHERE tt.ROW_ID >= ? AND tt.ROW_ID <= ?
+        ) as t; 
       EXPECTED_QUERY
 
-      # The formatting isn't something I'm willing to fight about, so we're going to try and squash whitespace
-      expected_query.gsub!(/\s+/, " ")
-
       query = subject.chunk_checksum_query_bounded(table_name: table_name, primary_key: pk, columns: columns)
-      expect(query.gsub(/\s+/, " ")).to eql(expected_query)
+      expect(query.gsub(/\s+/, " ")).to eql(expected_query.gsub(/\s+/, " "))
     end
   end
   describe "#chunk_checksum_query_unbounded" do
     let(:table_name) { SecureRandom.uuid }
     let(:pk_columns) { %w[id org_id country_code] }
-    let(:columns) { %w[some_column, some_other_column] }
+    let(:columns) { %w[some_column some_other_column] }
     let(:pk) { MultiColumnPrimaryKey.new(column_name: pk_columns.join('::'), table_name: table_name) }
 
     subject { MultiColumnQueryStrategy.new }
@@ -106,27 +122,29 @@ RSpec.describe 'MultiColumnQueryStrategy' do
       expected_query = <<~EXPECTED_QUERY
         SELECT COALESCE(min(t.ROW_ID), "") as START,
                COALESCE(max(t.ROW_ID), "") as END,
+               COALESCE(min(t.VISIBLE_ROW_ID), "") as VISIBLE_START,
+               COALESCE(max(t.VISIBLE_ROW_ID), "") as VISIBLE_END,
                COALESCE(count(t.ROW_ID), 0) as COUNT,
                COALESCE(CRC32(group_concat(t.CHECKSUM separator "|")), 0) as CHECKSUM
-
-        FROM(
-            SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(COALESCE(tt.some_column,, ""),
-                                                     COALESCE(tt.some_other_column, ""))) as CHECKSUM
-            FROM (
-                 SELECT CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, "")) AS ROW_ID, some_column,, some_other_column
+        FROM(     
+            SELECT tt.ROW_ID AS ROW_ID,
+                   tt.VISIBLE_ROW_ID AS VISIBLE_ROW_ID,
+                   CRC32(CONCAT(COALESCE(tt.some_column, ""), COALESCE(tt.some_other_column, ""))) as CHECKSUM
+            FROM (          
+                 SELECT CONCAT(LPAD(COALESCE(`#{table_name}`.id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.org_id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.country_code, ""), 16, 0)) AS ROW_ID,
+                        CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, "")) AS VISIBLE_ROW_ID,
+                        some_column,
+                        some_other_column
                  FROM `#{table_name}`
                  ORDER BY id, org_id, country_code
             ) as tt
-        WHERE tt.ROW_ID >= ?
-        LIMIT ?
-        ) as t;
+            WHERE tt.ROW_ID >= ?
+            LIMIT ?
+        ) as t; 
       EXPECTED_QUERY
 
-      # The formatting isn't something I'm willing to fight about, so we're going to try and squash whitespace
-      expected_query.gsub!(/\s+/, " ")
-
       query = subject.chunk_checksum_query_unbounded(table_name: table_name, primary_key: pk, columns: columns)
-      expect(query.gsub(/\s+/, " ")).to eql(expected_query)
+      expect(query.gsub(/\s+/, " ")).to eql(expected_query.gsub(/\s+/, " "))
     end
   end
   describe "#row_checksum_query" do
@@ -139,10 +157,13 @@ RSpec.describe 'MultiColumnQueryStrategy' do
 
     it "generates the correct SQL query" do
       expected_query = <<~EXPECTED_QUERY
-        SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(COALESCE(tt.some_column, ""),
-                                                 COALESCE(tt.some_other_column, ""))) as CHECKSUM
+        SELECT tt.ROW_ID AS ROW_ID,
+               CRC32(CONCAT(COALESCE(tt.some_column, ""), COALESCE(tt.some_other_column, ""))) as CHECKSUM
         FROM (
-             SELECT CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, "")) AS ROW_ID, some_column, some_other_column
+             SELECT CONCAT(LPAD(COALESCE(`#{table_name}`.id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.org_id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.country_code, ""), 16, 0)) AS ROW_ID,
+                    CONCAT(COALESCE(`#{table_name}`.id, ""), "::", COALESCE(`#{table_name}`.org_id, ""), "::", COALESCE(`#{table_name}`.country_code, "")) AS VISIBLE_ROW_ID,
+                    some_column,
+                    some_other_column
              FROM `#{table_name}`
              ORDER BY id, org_id, country_code
         ) as tt

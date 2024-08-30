@@ -37,6 +37,50 @@ describe "TablePair" do
     end
   end
 
+  describe "max_row_id" do
+    let(:master_table) { double Table }
+    let(:replica_table) { double Table }
+
+    subject { TablePair.new(table_name, mconn, rconn, logger: logger) }
+
+    context "when replica row_id is higher than master row_id" do
+      let(:master_row_id) { 12 }
+      let(:replica_row_id) { 14 }
+
+      it "should return the higher row_id" do
+        expect(master_table).to receive(:max_row_id) { master_row_id }
+        expect(replica_table).to receive(:max_row_id) { replica_row_id }
+
+        subject.master = master_table
+        subject.replica = replica_table
+
+        expect(subject.max_row_id).to be(replica_row_id)
+      end
+    end
+  end
+
+  describe "min_row_id" do
+    let(:master_table) { double Table }
+    let(:replica_table) { double Table }
+
+    subject { TablePair.new(table_name, mconn, rconn, logger: logger) }
+
+    context "when replica row_id is higher than master row_id" do
+      let(:master_row_id) { 12 }
+      let(:replica_row_id) { 14 }
+
+      it "should return the lower row_id" do
+        expect(master_table).to receive(:min_row_id) { master_row_id }
+        expect(replica_table).to receive(:min_row_id) { replica_row_id }
+
+        subject.master = master_table
+        subject.replica = replica_table
+
+        expect(subject.min_row_id).to be(master_row_id)
+      end
+    end
+  end
+
   describe "#compare_chunks" do
     let(:count) { 15 }
     let(:max_row_id) {"12345"}

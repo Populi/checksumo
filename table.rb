@@ -33,12 +33,18 @@ end
 
 # Encapsulate chunk comparison logic
 class ChunkComparison < AbstractComparison
-  attr_accessor :min_row, :max_row, :table_name
+  attr_accessor :min_row, :max_row, :table_name, :visible_min_row, :visible_max_row
 
   def initialize(opts = {})
     super
     @max_row = opts[:max_row]
     @min_row = opts[:min_row]
+    @visible_max_row = opts.fetch(:visible_max_row) do
+      @max_row
+    end
+    @visible_min_row = opts.fetch(:visible_min_row) do
+      @min_row
+    end
     @table_name = opts[:table_name]
   end
 
@@ -47,6 +53,8 @@ class ChunkComparison < AbstractComparison
       table_name: @table_name,
       min_row: [master.min, replica.min],
       max_row: [master.max, replica.max],
+      visible_min_row: [master.visible_min, replica.visible_min],
+      visible_max_row: [master.visible_max, replica.visible_max],
       count: [master.count, replica.count],
       crc32: [master.crc32, replica.crc32],
       mismatch: compare ? "false" : "true"
@@ -237,12 +245,16 @@ class TablePair
         next if rch.equal?(mch) # only keep checksums that are mismatched
         @logger.debug("chunk checksums misaligned on #{mch.inspect} and #{rch.inspect}")
 
-        diff << ChunkComparison.new(master: mch,
+        diff << ChunkComparison.new(
+          master: mch,
           replica: rch,
           table_name: mch.table_name,
           primary_key: primary_key,
           min_row: mch.min,
-          max_row: mch.max)
+          max_row: mch.max,
+          visible_min_row: mch.visible_min,
+          visible_max_row: mch.visible_max
+        )
       end
     end
 
