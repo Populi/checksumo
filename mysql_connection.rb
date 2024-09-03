@@ -282,6 +282,7 @@ class MysqlConnection
   end
 
   def generate_delete(table_name, row_id)
+    @logger.error("generate_delete table_name => #{table_name}; row_id => #{row_id}")
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
@@ -310,6 +311,7 @@ class MysqlConnection
   end
 
   def generate_insert(table_name, row_id)
+    @logger.debug("generate_insert table_name => #{table_name}; row_id => #{row_id}")
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
       table_name = "#{@database_name}.#{table_name}"
@@ -319,8 +321,6 @@ class MysqlConnection
 
     fall_back = proc do |err|
       @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err.inspect}))
-      # and print it to STDERR too
-      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err.inspect}))
       cmd
     end
 
@@ -345,42 +345,6 @@ class MysqlConnection
     cmd
   end
 
-  #
-  # this is probably the more correct generate_update implementation
-  # because of performance with heavily indexed tables, we'll use
-  # TablePair::generate_update instead.
-  def generate_update(table_name, row_id)
-    primary_key = primary_key(table_name)
-    statement = select_all_raw_query(table_name, row_id)
-    if @database_name
-      table_name = "#{@database_name}.#{sql_escape(table_name)}"
-    end
-
-    fall_back = proc do |err|
-      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
-      # and print it to STDERR too
-      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
-      []
-    end
-
-    cmd = @executor.execute(on_fail: fall_back) do
-      @client.query(statement, cast: false).map do |row|
-        pairs = row.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
-          val = if v.nil?
-            "NULL"
-          else
-            %('#{v}')
-          end
-          %(#{k} = #{val})
-        end
-        %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
-         WHERE #{table_name} = '#{row_id}';)
-      end
-    end
-    @logger.debug("generated insert command #{cmd}")
-    cmd
-  end
-
   def row_values(table_name, row_id)
     primary_key = primary_key(table_name)
     statement = select_all_query(table_name)
@@ -388,14 +352,16 @@ class MysqlConnection
     rows = []
 
     fall_back = proc do |err|
-      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
-      # and print it to STDERR too
-      warn(%(error on table=>'#{table_name}', row_id => '#{row_id}', error: #{err}))
+      @logger.error(%(caught error on table=>'#{table_name}', row_id => '#{row_id}', error: '#{err}'))
       rows
     end
 
     @executor.execute(on_fail: fall_back) do
-      statement.execute(row_id).each do |row|
+      # This is a little bit evil... '*' is Ruby for #'APPLY
+      # By coercing into a String first, we ensure `split` exists for every value
+      # But we're trusting the MySQL Client to coerce types in the `execute`
+      fields = "#{row_id}".split(/::/)
+      statement.execute(*fields).each do |row|
         rows << row
       end
     end

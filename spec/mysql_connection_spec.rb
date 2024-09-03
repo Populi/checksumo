@@ -489,33 +489,4 @@ describe MysqlConnection do
       end
     end
   end
-  describe "#generate_update" do
-    let(:pk_result) { double(Mysql2::Result) }
-    let(:pk_statement) { double(Mysql2::Statement) }
-
-    let(:row_checksum) { build(:row_checksum) }
-    let(:select_all_statement) { double(Mysql2::Statement) }
-    let(:select_all_result) { double(Mysql2::Result) }
-
-    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
-    it "queries existing rows" do
-      expect(mysql_client).to receive(:prepare).at_least(:once) do |*args|
-        query = args.shift
-        if query.match?("PRIMARY KEY")
-          pk_statement
-        elsif query.match?('select \\* from .+ where .+')
-          select_all_statement
-        else
-          raise "missed all branches #{query}"
-        end
-      end
-
-      expect(pk_statement).to receive(:execute) { pk_result }
-      expect(pk_result).to receive(:map) { ["id"] }
-
-      expect(mysql_client).to receive(:query).with(/select \* from .+ where .+/i, anything).at_least(:once).and_raise("invalid date")
-
-      subject.generate_update(row_checksum.table_name, row_checksum.row_id)
-    end
-  end
 end

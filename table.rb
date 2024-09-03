@@ -284,6 +284,7 @@ class TablePair
       @table_name
     end
 
+    # TODO - from here we need to call into the Table's QueryStrategy object to ensure our queries are consistent.
     primary_key = @master.primary_key
     pairs = delta.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
       val = if v.nil?
@@ -331,6 +332,7 @@ class TablePair
 
   # Find a per-column diff for a table pair
   def row_diff(row_id)
+    @logger.debug("row_id: #{row_id}")
     master_row = @master.row_values(row_id).first
     replica_row = @replica.row_values(row_id).first
     delta = Hash[]
