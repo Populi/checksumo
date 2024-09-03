@@ -97,9 +97,12 @@ class Parser
         args[:wait_interval] = int.to_f
       end
       opts.on("--watch-mode=MODE", "Watch mode: one of (CHUNK_SUMMARY, ROW_DIFF, WAIT) [#{args[:watch_mode]}]") do |m|
-        mode = m&.upcase&.to_sym
-        if [:CHUNK_SUMMARY, :ROW_DIFF, :WAIT].include?(mode)
-          args[:watch_mode] = mode
+        if /^ROW/i =~ m
+          args[:watch_mode] = :ROW_DIFF
+        elsif /^WAIT/i =~ m
+          args[:watch_mode] = :WAIT
+        elsif /^CHUNK/i =~ m
+          args[:watch_mode] = :CHUNK_SUMMARY
         else
           puts "watch mode must be one of [CHUNK_SUMMARY, ROW_DIFF, WAIT]"
           exit
