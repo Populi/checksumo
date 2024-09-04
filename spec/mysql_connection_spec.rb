@@ -89,7 +89,7 @@ describe MysqlConnection do
     end
   end
 
-  # describe "#primary_key_strategy" do
+  # describe "#primary_key" do
   #   let(:result) { double(Mysql2::Result) }
   #   let(:statement) { double(Mysql2::Statement) }
   #

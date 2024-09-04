@@ -87,7 +87,7 @@ end
 class Table
   include LogHelper
 
-  attr_accessor :conn, :primary_key_strategy
+  attr_accessor :conn, :primary_key
 
   def initialize(table_name, connection, opts = {})
     @conn = connection
@@ -95,11 +95,6 @@ class Table
     @logger = opts.fetch(:logger) do
       logger
     end
-    # We need a Primary Key Strategy to generate the queries for this Table.
-    # The default will assume a single-column PK.
-    # @primary_key_strategy = opts.fetch(:primary_key_strategy) do
-    #   @logger.info("generating primary key strategy: #{nil}")
-    # end
   end
 
   def max_row_id
@@ -122,7 +117,7 @@ class Table
     @conn.row_checksum(@name, opts)
   end
 
-  def primary_key
+  def primary_key_columns
     @conn.primary_key_columns(@name)
   end
 
