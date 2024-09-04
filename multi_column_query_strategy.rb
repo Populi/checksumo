@@ -44,6 +44,37 @@ class MultiColumnQueryStrategy < QueryStrategy
     %(CONCAT(#{row_id_query}))
   end
 
+  def where_clause(table_name: nil, primary_key: nil, row_id: nil)
+    raise "MultiColumnPrimaryKey object required" unless primary_key.is_a? MultiColumnPrimaryKey
+    @logger.debug("primary key: #{primary_key}")
+
+    # Split the :row_id into distinct values
+    values = if row_id.nil?
+               primary_key.columns.map do |_c|
+                 nil
+               end
+             else
+               row_id.split(/:+/)
+             end
+
+    pairs = []
+    primary_key.columns.each_with_index do |col, idx|
+      value = values[idx]
+      str = if value
+              %(#{col} = #{value})
+            else
+              %(#{col} IS NULL)
+            end
+      pairs << str
+    end
+
+    clause = %(WHERE #{pairs.join(" AND ")})
+
+    @logger.debug("where clause: #{clause}")
+
+    clause
+  end
+
   def max_query(table_name: nil, primary_key: nil)
     @logger.debug("Primary key for #{table_name}: #{primary_key.columns.inspect}")
     padded_row_id_query = padded_row_id_query(table_name: table_name, primary_key: primary_key)
@@ -173,7 +204,7 @@ class MultiColumnQueryStrategy < QueryStrategy
     row_id_query = row_id_query(table_name: table_name, primary_key: primary_key)
 
     query = <<~QUERY
-      SELECT tt.ROW_ID AS ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
+      SELECT tt.ROW_ID AS ROW_ID, tt.VISIBLE_ROW_ID AS VISIBLE_ROW_ID, CRC32(CONCAT(#{col_str})) as CHECKSUM
       FROM (
            SELECT #{padded_row_id_query} AS ROW_ID, #{row_id_query} AS VISIBLE_ROW_ID, #{columns.join(", ")}
            FROM `#{table_name}`

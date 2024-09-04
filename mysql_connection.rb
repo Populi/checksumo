@@ -50,11 +50,14 @@ end
 
 # Checksum for a single row
 class RowChecksum < AbstractChecksum
-  attr_accessor :row_id
+  attr_accessor :row_id, :visible_row_id
 
   def initialize(opts = {})
     super
     @row_id = opts.fetch(:row_id, "")
+    @visible_row_id = opts.fetch(:visible_row_id) do
+      @row_id
+    end
   end
 
   def equal?(other)
@@ -136,20 +139,7 @@ class MysqlConnection
 
   memoize :primary_key
 
-  def checksum_query_strategy(opts = {})
-    table_name = opts.fetch(:table_name) do
-      raise "Cannot create a Primary Key Strategy without a Table Name"
-    end
-    pks = primary_key(table_name: table_name)
 
-    if pks.is_a?(MultiColumnPrimaryKey)
-      MultiColumnQueryStrategy.new()
-    else
-      QueryStrategy.new()
-    end
-  end
-
-  memoize :checksum_query_strategy
 
   def search
     query = <<~QUERY
@@ -178,24 +168,8 @@ class MysqlConnection
   end
   memoize :columns
 
-  def primary_key_columns(table_name, _opts = {})
-    @primary_key_cache.fetch(table_name) do |name|
-      statement = primary_key_query
-      result_set = @executor.execute {
-        @logger.debug("executing primary key query: #{statement.inspect}")
-        statement.execute(name)
-      }
-      cols = result_set.map do |row|
-        row["COLUMN_NAME"]
-      end
-      cols.join("::")
-    end
-  end
-
-  memoize :primary_key_columns
-
   def max_row_id(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.max_query(table_name: table_name, primary_key: pks)
     maxes = @executor.execute do
@@ -208,7 +182,7 @@ class MysqlConnection
   memoize :max_row_id
 
   def min_row_id(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.min_query(table_name: table_name, primary_key: pks)
     maxes = @executor.execute do
@@ -221,7 +195,7 @@ class MysqlConnection
   memoize :min_row_id
 
   def row_count(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.min_query(table_name: table_name, primary_key: pks)
     lines = @executor.execute do
@@ -247,7 +221,7 @@ class MysqlConnection
     end
     result.map do |row|
       @logger.debug("RowChecksum row: #{row.inspect}")
-      RowChecksum.new(table_name: table_name, row_id: row["ROW_ID"], crc32: row["CHECKSUM"], primary_key_columns: primary_key)
+      RowChecksum.new(table_name: table_name, row_id: row["ROW_ID"], crc32: row["CHECKSUM"], primary_key_columns: primary_key, visible_row_id: row["VISIBLE_ROW_ID"])
     end
   end
 
@@ -371,7 +345,49 @@ class MysqlConnection
     rows
   end
 
+  def where_clause(table_name, row_id)
+    qs = query_strategy(table_name: table_name)
+    pk = primary_key(table_name: table_name)
+
+    clause = qs.where_clause(table_name: table_name, primary_key: pk, row_id: row_id)
+    @logger.debug("Where Clause: '#{clause}'")
+
+    clause
+  end
+
   private
+
+  def primary_key_columns(table_name, _opts = {})
+    @primary_key_cache.fetch(table_name) do |name|
+      statement = primary_key_query
+      result_set = @executor.execute {
+        @logger.debug("executing primary key query: #{statement.inspect}")
+        statement.execute(name)
+      }
+      cols = result_set.map do |row|
+        row["COLUMN_NAME"]
+      end
+      cols.join("::")
+    end
+  end
+
+  memoize :primary_key_columns
+
+  def query_strategy(opts = {})
+    table_name = opts.fetch(:table_name) do
+      raise "Cannot create a Primary Key Strategy without a Table Name"
+    end
+    pks = primary_key(table_name: table_name)
+    @logger.debug("Primary Key for '#{table_name}': #{pks}")
+
+    if pks.is_a?(MultiColumnPrimaryKey)
+      MultiColumnQueryStrategy.new()
+    else
+      QueryStrategy.new()
+    end
+  end
+
+  memoize :query_strategy
 
   def chunk_checksum_bounded(table_name, min, max)
     statement = chunk_checksum_query_bounded(table_name)
@@ -401,7 +417,7 @@ class MysqlConnection
   memoize :primary_key_query
 
   def chunk_checksum_query_bounded(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.chunk_checksum_query_bounded(table_name: table_name, primary_key: pks, columns: columns(table_name))
 
@@ -410,7 +426,7 @@ class MysqlConnection
   memoize :chunk_checksum_query_bounded
 
   def chunk_checksum_query_unbounded(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.chunk_checksum_query_unbounded(table_name: table_name, primary_key: pks, columns: columns(table_name))
 
@@ -419,7 +435,7 @@ class MysqlConnection
   memoize :chunk_checksum_query_unbounded
 
   def row_checksum_query(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.row_checksum_query(table_name: table_name, primary_key: pks, columns: columns(table_name))
 
@@ -428,17 +444,18 @@ class MysqlConnection
   memoize :row_checksum_query
 
   def select_all_raw_query(table_name, row_id)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     qs.select_all_raw_query(table_name: table_name, primary_key: pks, row_id: row_id)
   end
   memoize :select_all_raw_query
 
   def select_all_query(table_name)
-    qs = checksum_query_strategy(table_name: table_name)
+    qs = query_strategy(table_name: table_name)
     pks = primary_key(table_name: table_name)
     query = qs.select_all_query(table_name: table_name, primary_key: pks)
     @client.prepare(query)
   end
   memoize :select_all_query
+
 end

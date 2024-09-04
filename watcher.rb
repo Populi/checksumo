@@ -103,7 +103,7 @@ class ReplicationWatcher
     tp = table_pairs.find { |tp| tp.table_name == row_comparison.table_name }
     return "" if tp.nil?
 
-    cmds = tp.generate_update(row_comparison.row_id)
+    cmds = tp.generate_update(row_comparison.visible_row_id)
 
     # cmds = master.generate_update(row_comparison.table_name, row_comparison.row_id)
     return "" if cmds.empty?

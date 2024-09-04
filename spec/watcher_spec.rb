@@ -128,6 +128,7 @@ describe ReplicationWatcher do
       let(:crc32) { 80012233455667 }
       it "should query each table pair for its delta" do
         allow(master).to receive(:primary_key_columns) { primary_key_columns }
+        allow(master).to receive(:primary_key) { PrimaryKey.new(table_name: "addresses", column_name: "some_primary_key") }
         allow(master).to receive(:min_row_id) { min_row_id }
         allow(master).to receive(:max_row_id) { max_row_id }
         allow(master).to receive(:row_count) { row_count }
@@ -282,6 +283,8 @@ describe ReplicationWatcher do
       context "when there are sql commands" do
         before do
           allow(master).to receive(:primary_key_columns).with(/addresses/) { primary_key_columns }
+          allow(master).to receive(:primary_key) { PrimaryKey.new(table_name: "addresses", column_name: "id") }
+          allow(master).to receive(:where_clause) { "WHERE bleah = bleah " }
           allow(master).to receive(:row_values).with(/addresses/, 12).once do |table_name, row_id|
             [{
                primary_key_columns.to_s => row_id,
@@ -323,6 +326,7 @@ describe ReplicationWatcher do
       let(:crc32) { 80012233455667 }
       it "should query each table pair for its delta" do
         allow(master).to receive(:primary_key_columns) { primary_key_columns }
+        allow(master).to receive(:primary_key) { PrimaryKey.new(table_name: "addresses", column_name: "id") }
         allow(master).to receive(:min_row_id) { min_row_id }
         allow(master).to receive(:max_row_id) { max_row_id }
         allow(master).to receive(:row_count) { row_count }

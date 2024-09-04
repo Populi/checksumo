@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'log_helper'
+require_relative 'primary_key'
 
 class QueryStrategy
   include LogHelper
@@ -12,6 +13,23 @@ class QueryStrategy
   end
 
   def generate_delete(table_name: nil, row_id: nil) end
+
+  def where_clause(table_name: nil, primary_key: nil, row_id: nil)
+    raise "PrimaryKey object required" unless primary_key.is_a? PrimaryKey
+    @logger.debug("primary key: #{primary_key}")
+
+    primary_key_column = primary_key.column_name
+
+    clause = if row_id
+               %(WHERE #{primary_key_column} = #{row_id})
+             else
+               %(WHERE #{primary_key_column} IS NULL)
+             end
+
+    @logger.debug("where clause: #{clause}")
+
+    clause
+  end
 
   def max_query(table_name: nil, primary_key: nil)
     %(SELECT max(#{primary_key.column_name}) AS PK_MAX FROM `#{table_name}`)

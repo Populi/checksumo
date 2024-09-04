@@ -89,6 +89,7 @@ describe "TablePair" do
       # only called when @logger.debug?
       allow(mconn).to receive(:max_row_id) { max_row_id }
       allow(mconn).to receive(:primary_key_columns) { "id" }
+      allow(mconn).to receive(:primary_key) { PrimaryKey.new(table_name: table_name, column_name: "id") }
 
       # should always be called
       expect(mconn).to receive(:min_row_id).at_least(:once) { "12" }
@@ -130,15 +131,18 @@ describe "TablePair" do
   describe "#generate_update" do
     let(:table_name) { "addresses" }
     let(:primary_key_columns) { "id" }
+    let(:primary_key) { PrimaryKey.new(column_name: "id", table_name: table_name) }
     let(:database_name) { "production_database" }
     let(:row_checksum) { build(:row_checksum, primary_key: primary_key_columns, table_name: table_name) }
     before do
       allow(mconn).to receive(:primary_key_columns) { primary_key_columns }
+      allow(mconn).to receive(:primary_key) { primary_key }
     end
     context "when database_name is set" do
       subject { TablePair.new(table_name, mconn, rconn, database_name: database_name) }
 
       it "should produce a list of update commands including database name" do
+        allow(mconn).to receive(:where_clause) { "WHERE bleah = bleah" }
         expect(mconn).to receive(:row_values) do |*args|
           [{
              primary_key_columns => row_checksum.row_id,
@@ -165,6 +169,7 @@ describe "TablePair" do
       subject { TablePair.new(table_name, mconn, rconn) }
 
       it "should produce a list of update commands including only the table name" do
+        allow(mconn).to receive(:where_clause) { "WHERE bleah = bleah" }
         expect(mconn).to receive(:row_values) do |*args|
           [{
              primary_key_columns => row_checksum.row_id,

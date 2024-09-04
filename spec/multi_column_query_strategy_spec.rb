@@ -158,6 +158,7 @@ RSpec.describe 'MultiColumnQueryStrategy' do
     it "generates the correct SQL query" do
       expected_query = <<~EXPECTED_QUERY
         SELECT tt.ROW_ID AS ROW_ID,
+               tt.VISIBLE_ROW_ID AS VISIBLE_ROW_ID, 
                CRC32(CONCAT(COALESCE(tt.some_column, ""), COALESCE(tt.some_other_column, ""))) as CHECKSUM
         FROM (
              SELECT CONCAT(LPAD(COALESCE(`#{table_name}`.id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.org_id, ""), 16, 0), "::", LPAD(COALESCE(`#{table_name}`.country_code, ""), 16, 0)) AS ROW_ID,
@@ -217,6 +218,38 @@ RSpec.describe 'MultiColumnQueryStrategy' do
 
       query = subject.select_all_query(table_name: table_name, primary_key: pk)
       expect(query.gsub(/\s+/, " ")).to eql(expected_query)
+    end
+  end
+  describe "#where_clause" do
+    let(:table_name) { SecureRandom.uuid }
+    let(:columns) { %w[id org_id country_code] }
+    let(:column_name) { columns.join("::") }
+    let(:primary_key) { MultiColumnPrimaryKey.new(column_name: column_name, table_name: table_name) }
+
+    subject { MultiColumnQueryStrategy.new() }
+
+    context "when :row_id is not null" do
+      let(:row_id) { %w[123, 7, us] }
+
+      it "should generate the correct query" do
+        expected_query = <<~QUERY
+          WHERE id = #{row_id[0]} AND org_id = #{row_id[1]} AND country_code = #{row_id[2]}
+        QUERY
+        expected_query.gsub!(/\s+/, " ").gsub!(/\s*$/, "")
+
+        query = subject.where_clause(table_name: table_name, primary_key: primary_key, row_id: row_id.join("::"))
+        expect(query).to eql(expected_query)
+      end
+    end
+    context "when :row_id is null" do
+      it "should generate the correct query" do
+        expected_query = <<~QUERY
+          WHERE id IS NULL AND org_id IS NULL AND country_code IS NULL
+        QUERY
+
+        query = subject.where_clause(table_name: table_name, primary_key: primary_key, row_id: nil)
+        expect(query).to eql(expected_query.gsub(/\s+/, " ").gsub(/\s*$/, ""))
+      end
     end
   end
 end

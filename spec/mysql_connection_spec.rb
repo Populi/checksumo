@@ -46,7 +46,7 @@ describe MysqlConnection do
     it { should respond_to(:check) }
     it { should respond_to(:search) }
     it { should respond_to(:row_checksum) }
-    it { should respond_to(:primary_key_columns) }
+    # it { should respond_to(:primary_key_columns) }
     it { should respond_to(:max_row_id) }
     it { should respond_to(:min_row_id) }
     it { should respond_to(:database_name) }
@@ -89,31 +89,31 @@ describe MysqlConnection do
     end
   end
 
-  # describe "#primary_key" do
-  #   let(:result) { double(Mysql2::Result) }
-  #   let(:statement) { double(Mysql2::Statement) }
-  #
-  #   subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
-  #
-  #   context "when primary key cache is empty" do
-  #     it "queries for primary_key before querying for the max value" do
-  #       expect(mysql_client).to receive(:prepare) { statement }
-  #       expect(statement).to receive(:execute) { result }
-  #       expect(result).to receive(:map) { ["id"] }
-  #
-  #       expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
-  #
-  #       expect(subject.max_row_id("addresses")).to eq("12345667")
-  #     end
-  #   end
-  #   context "when primary key cache is populated" do
-  #     it "uses the cached primary_key when querying for the max value" do
-  #       subject.primary_key_cache["addresses"] = "id"
-  #       expect(mysql_client).to receive(:query) { [{"max" => "12345667"}] }
-  #       expect(subject.max_row_id("addresses")).to eq("12345667")
-  #     end
-  #   end
-  # end
+  describe "#primary_key" do
+    let(:result) { double(Mysql2::Result) }
+    let(:statement) { double(Mysql2::Statement) }
+
+    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
+
+    context "when primary key cache is empty" do
+      it "queries for primary_key before querying for the max value" do
+        expect(mysql_client).to receive(:prepare) { statement }
+        expect(statement).to receive(:execute) { result }
+        expect(result).to receive(:map) { ["id"] }
+
+        expect(mysql_client).to receive(:query) { [{ "PK_MAX" => "12345667" }] }
+
+        expect(subject.max_row_id("addresses")).to eq("12345667")
+      end
+    end
+    context "when primary key cache is populated" do
+      it "uses the cached primary_key when querying for the max value" do
+        subject.primary_key_cache["addresses"] = "id"
+        expect(mysql_client).to receive(:query) { [{ "PK_MAX" => "12345667" }] }
+        expect(subject.max_row_id("addresses")).to eq("12345667")
+      end
+    end
+  end
 
   describe "#search" do
     subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
@@ -161,20 +161,20 @@ describe MysqlConnection do
     end
   end
 
-  describe "#primary_key" do
-    let(:result) { double(Mysql2::Result) }
-    let(:statement) { double(Mysql2::Statement) }
-
-    subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
-
-    it "prepares and executes a query" do
-      expect(mysql_client).to receive(:prepare) { statement }
-      expect(statement).to receive(:execute) { result }
-      expect(result).to receive(:map) { ["id"] }
-
-      expect(subject.primary_key_columns("addresses")).to eq("id")
-    end
-  end
+  # describe "#primary_key" do
+  #   let(:result) { double(Mysql2::Result) }
+  #   let(:statement) { double(Mysql2::Statement) }
+  #
+  #   subject { MysqlConnection.new(client: mysql_client, database_name: database_name, logger: logger) }
+  #
+  #   it "prepares and executes a query" do
+  #     expect(mysql_client).to receive(:prepare) { statement }
+  #     expect(statement).to receive(:execute) { result }
+  #     expect(result).to receive(:map) { ["id"] }
+  #
+  #     expect(subject.primary_key_columns("addresses")).to eq("id")
+  #   end
+  # end
 
   describe "#max_row_id" do
     let(:result) { double(Mysql2::Result) }

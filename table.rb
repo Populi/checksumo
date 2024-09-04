@@ -64,12 +64,15 @@ end
 
 # Encapsulate row comparison logic
 class RowComparison < AbstractComparison
-  attr_accessor :row_id, :table_name
+  attr_accessor :row_id, :table_name, :visible_row_id
 
   def initialize(opts = {})
     super
     @row_id = opts[:row_id]
     @table_name = opts[:table_name]
+    @visible_row_id = opts.fetch(:visible_row_id) do
+      @row_id
+    end
   end
 
   def self.from(opts = {})
@@ -79,6 +82,8 @@ class RowComparison < AbstractComparison
 
     opts[:row_id] = master&.row_id || replica.row_id
     opts[:table_name] = master&.table_name || replica.table_name
+    # fall back to row_id if there's not a defined visible_row_id
+    opts[:visible_row_id] = master&.visible_row_id || replica&.visible_row_id || opts[:row_id]
     RowComparison.new(opts)
   end
 end
@@ -87,7 +92,7 @@ end
 class Table
   include LogHelper
 
-  attr_accessor :conn, :primary_key
+  attr_accessor :conn, :name
 
   def initialize(table_name, connection, opts = {})
     @conn = connection
@@ -95,6 +100,7 @@ class Table
     @logger = opts.fetch(:logger) do
       logger
     end
+    @primary_key = opts[:primary_key]
   end
 
   def max_row_id
@@ -119,6 +125,14 @@ class Table
 
   def primary_key_columns
     @conn.primary_key_columns(@name)
+  end
+
+  def primary_key
+    if @primary_key
+      @primary_key
+    else
+      @conn.primary_key(table_name: @name)
+    end
   end
 
   def row_values(row_id)
@@ -272,6 +286,11 @@ class TablePair
 
     # TODO - from here we need to call into the Table's QueryStrategy object to ensure our queries are consistent.
     primary_key = @master.primary_key
+    @logger.debug("master Primary Key: '#{primary_key}'")
+
+    # query_strategy = @master.conn.query_strategy(table_name: @table_name)
+    # @logger.debug("master Query Strategy: '#{query_strategy}'")
+
     pairs = delta.filter { |k, v| !k.eql?(primary_key) }.map do |k, v|
       val = if v.nil?
         "NULL"
@@ -280,8 +299,11 @@ class TablePair
       end
       %(#{k} = #{val})
     end
-    %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")}
-         WHERE #{primary_key} = '#{row_id}'\n;)
+
+    where_clause = @master.conn.where_clause(@table_name, row_id)
+    @logger.debug("where_clause: #{where_clause}")
+
+    %(UPDATE #{table_name} SET #{pairs.join(",\n\t\t")} #{where_clause}\n;)
   end
 
   private

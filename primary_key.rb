@@ -13,7 +13,7 @@ class PrimaryKey
 
   def initialize(opts = {})
     @column_name = opts.fetch(:column_name) do
-      raise "Cannot create a PrimaryKeyStrategy without a column name"
+      raise "Cannot create a PrimaryKey without a column name"
     end
     @logger = opts.fetch(:logger) do
       logger
@@ -22,7 +22,7 @@ class PrimaryKey
       PRIMARY_KEY_NAME
     end
     @table_name = opts.fetch(:table_name) do
-      raise "Cannot create a PrimaryKeyStrategy without a table name"
+      raise "Cannot create a PrimaryKey without a table name"
     end
   end
 end

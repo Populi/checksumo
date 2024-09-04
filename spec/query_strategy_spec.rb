@@ -177,4 +177,35 @@ RSpec.describe 'QueryStrategy' do
       expect(query).to eql(expected_query)
     end
   end
+  describe "#where_clause" do
+    let(:table_name) { SecureRandom.uuid }
+    let(:column_name) { 'id' }
+    let(:primary_key) { PrimaryKey.new(column_name: column_name, table_name: table_name) }
+
+    subject { QueryStrategy.new() }
+
+    context "when :row_id is not null" do
+      let(:row_id) { SecureRandom.uuid }
+
+      it "should generate the correct query" do
+        expected_query = <<~QUERY
+          WHERE id = #{row_id}
+        QUERY
+        expected_query.gsub!(/\s+/, " ").gsub!(/\s*$/, "")
+
+        query = subject.where_clause(table_name: table_name, primary_key: primary_key, row_id: row_id)
+        expect(query).to eql(expected_query)
+      end
+    end
+    context "when :row_id is null" do
+      it "should generate the correct query" do
+        expected_query = <<~QUERY
+          WHERE id IS NULL
+        QUERY
+
+        query = subject.where_clause(table_name: table_name, primary_key: primary_key, row_id: nil)
+        expect(query).to eql(expected_query.gsub(/\s+/, " ").gsub(/\s*$/, ""))
+      end
+    end
+  end
 end
