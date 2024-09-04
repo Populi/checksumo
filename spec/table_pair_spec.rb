@@ -88,7 +88,7 @@ describe "TablePair" do
     it "calls into the master and replica connections" do
       # only called when @logger.debug?
       allow(mconn).to receive(:max_row_id) { max_row_id }
-      allow(mconn).to receive(:primary_key) { "id" }
+      allow(mconn).to receive(:primary_key_columns) { "id" }
 
       # should always be called
       expect(mconn).to receive(:min_row_id).at_least(:once) { "12" }
@@ -129,11 +129,11 @@ describe "TablePair" do
 
   describe "#generate_update" do
     let(:table_name) { "addresses" }
-    let(:primary_key) { "id" }
+    let(:primary_key_columns) { "id" }
     let(:database_name) { "production_database" }
-    let(:row_checksum) { build(:row_checksum, primary_key: primary_key, table_name: table_name) }
+    let(:row_checksum) { build(:row_checksum, primary_key: primary_key_columns, table_name: table_name) }
     before do
-      allow(mconn).to receive(:primary_key) { primary_key }
+      allow(mconn).to receive(:primary_key_columns) { primary_key_columns }
     end
     context "when database_name is set" do
       subject { TablePair.new(table_name, mconn, rconn, database_name: database_name) }
@@ -141,7 +141,7 @@ describe "TablePair" do
       it "should produce a list of update commands including database name" do
         expect(mconn).to receive(:row_values) do |*args|
           [{
-            primary_key => row_checksum.row_id,
+             primary_key_columns => row_checksum.row_id,
             "number" => "4475",
             "street" => "1st St",
             "city" => "Moscow",
@@ -150,7 +150,7 @@ describe "TablePair" do
         end
         expect(rconn).to receive(:row_values) do |*args|
           [{
-            primary_key => row_checksum.row_id,
+             primary_key_columns => row_checksum.row_id,
             "number" => "475",
             "street" => "1st St",
             "city" => "Moscow",
@@ -167,7 +167,7 @@ describe "TablePair" do
       it "should produce a list of update commands including only the table name" do
         expect(mconn).to receive(:row_values) do |*args|
           [{
-            primary_key => row_checksum.row_id,
+             primary_key_columns => row_checksum.row_id,
             "number" => "4475",
             "street" => "1st St",
             "city" => "Moscow",
@@ -176,7 +176,7 @@ describe "TablePair" do
         end
         expect(rconn).to receive(:row_values) do |*args|
           [{
-            primary_key => row_checksum.row_id,
+             primary_key_columns => row_checksum.row_id,
             "number" => "475",
             "street" => "1st St",
             "city" => "Moscow",

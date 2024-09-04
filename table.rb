@@ -123,7 +123,7 @@ class Table
   end
 
   def primary_key
-    @conn.primary_key(@name)
+    @conn.primary_key_columns(@name)
   end
 
   def row_values(row_id)
@@ -240,7 +240,7 @@ class TablePair
           master: mch,
           replica: rch,
           table_name: mch.table_name,
-          primary_key: primary_key,
+          primary_key_columns: primary_key,
           min_row: mch.min,
           max_row: mch.max,
           visible_min_row: mch.visible_min,
@@ -254,7 +254,7 @@ class TablePair
         table_name: @table_name,
         max_row_id: @master.max_row_id,
         min_row_id: @master.min_row_id,
-        primary_key: @master.primary_key,
+        primary_key_columns: @master.primary_key,
         diff: diff
       }
 

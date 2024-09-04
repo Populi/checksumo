@@ -121,36 +121,36 @@ describe ReplicationWatcher do
       end
     end
     context "when table_names is not empty" do
-      let(:primary_key) { "some_primary_key" }
+      let(:primary_key_columns) { "some_primary_key" }
       let(:min_row_id) { 12 }
       let(:max_row_id) { 32 }
       let(:row_count) { 15 }
       let(:crc32) { 80012233455667 }
       it "should query each table pair for its delta" do
-        allow(master).to receive(:primary_key) { primary_key }
+        allow(master).to receive(:primary_key_columns) { primary_key_columns }
         allow(master).to receive(:min_row_id) { min_row_id }
         allow(master).to receive(:max_row_id) { max_row_id }
         allow(master).to receive(:row_count) { row_count }
 
-        allow(replica).to receive(:primary_key) { primary_key } # probably don't need this
+        allow(replica).to receive(:primary_key_columns) { primary_key_columns } # probably don't need this
         allow(replica).to receive(:row_count) { row_count }
 
         expect(master).to receive(:chunk_checksum).at_least(3).times do |table_name, opts|
           [ChunkChecksum.new(table_name: table_name,
-            crc32: crc32,
-            min: min_row_id,
-            max: max_row_id,
-            count: row_count,
-            primary_key: primary_key)]
+                             crc32: crc32,
+                             min: min_row_id,
+                             max: max_row_id,
+                             count: row_count,
+                             primary_key_columns: primary_key_columns)]
         end
 
         expect(replica).to receive(:chunk_checksum).at_least(3).times do |table_name, opts|
           [ChunkChecksum.new(table_name: table_name,
-            crc32: crc32,
-            min: min_row_id,
-            max: max_row_id,
-            count: row_count,
-            primary_key: primary_key)]
+                             crc32: crc32,
+                             min: min_row_id,
+                             max: max_row_id,
+                             count: row_count,
+                             primary_key_columns: primary_key_columns)]
         end
         subject.delta do |pair|
           pp pair
@@ -184,11 +184,11 @@ describe ReplicationWatcher do
       end
 
       context "when there are sql commands" do
-        let(:primary_key) { "some_primary_key" }
+        let(:primary_key_columns) { "some_primary_key" }
         before do
           allow(replica).to receive(:generate_delete) do |table_name, row_id|
             [
-              %(DELETE FROM #{table_name} WHERE #{primary_key} = '#{row_id}';)
+              %(DELETE FROM #{table_name} WHERE #{primary_key_columns} = '#{row_id}';)
             ]
           end
         end
@@ -241,7 +241,7 @@ describe ReplicationWatcher do
 
   describe "#generate_update" do
     let(:table_names) { %w[addresses media media_encodings] }
-    let(:primary_key) { "id" }
+    let(:primary_key_columns) { "id" }
     subject { ReplicationWatcher.new(master: master, replica: replica, logger: logger, table_names: table_names) }
 
     context "when there is a master value but no replica value" do
@@ -257,18 +257,18 @@ describe ReplicationWatcher do
       let(:row_comparison) { RowComparison.new(row_id: 12, table_name: "addresses", master: master, replica: replica) }
       context "when table pair generates no sql commands" do
         before do
-          allow(master).to receive(:primary_key).with(/addresses/) { primary_key }
+          allow(master).to receive(:primary_key_columns).with(/addresses/) { primary_key_columns }
           allow(master).to receive(:row_values).with(/addresses/, 12).once do |table_name, row_id|
             [{
-              primary_key.to_s => row_id,
+               primary_key_columns.to_s => row_id,
               "some column" => "some value",
               "some other_column" => "some other value"
             }]
           end
-          allow(replica).to receive(:primary_key).with(/addresses/) { primary_key }
+          allow(replica).to receive(:primary_key_columns).with(/addresses/) { primary_key_columns }
           allow(replica).to receive(:row_values).with(/addresses/, 12).once do |table_name, row_id|
             [{
-              primary_key.to_s => row_id,
+               primary_key_columns.to_s => row_id,
               "some column" => "some value",
               "some other_column" => "some other value"
             }]
@@ -281,18 +281,18 @@ describe ReplicationWatcher do
 
       context "when there are sql commands" do
         before do
-          allow(master).to receive(:primary_key).with(/addresses/) { primary_key }
+          allow(master).to receive(:primary_key_columns).with(/addresses/) { primary_key_columns }
           allow(master).to receive(:row_values).with(/addresses/, 12).once do |table_name, row_id|
             [{
-              primary_key.to_s => row_id,
+               primary_key_columns.to_s => row_id,
               "some column" => "some value",
               "some other_column" => "some other value from master"
             }]
           end
-          allow(replica).to receive(:primary_key).with(/addresses/) { primary_key }
+          allow(replica).to receive(:primary_key_columns).with(/addresses/) { primary_key_columns }
           allow(replica).to receive(:row_values).with(/addresses/, 12).once do |table_name, row_id|
             [{
-              primary_key.to_s => row_id,
+               primary_key_columns.to_s => row_id,
               "some column" => "some value",
               "some other_column" => "some other value from replica"
             }]
@@ -316,36 +316,36 @@ describe ReplicationWatcher do
       end
     end
     context "when table_names is not empty" do
-      let(:primary_key) { "some_primary_key" }
+      let(:primary_key_columns) { "some_primary_key" }
       let(:min_row_id) { 12 }
       let(:max_row_id) { 32 }
       let(:row_count) { 15 }
       let(:crc32) { 80012233455667 }
       it "should query each table pair for its delta" do
-        allow(master).to receive(:primary_key) { primary_key }
+        allow(master).to receive(:primary_key_columns) { primary_key_columns }
         allow(master).to receive(:min_row_id) { min_row_id }
         allow(master).to receive(:max_row_id) { max_row_id }
         allow(master).to receive(:row_count) { row_count }
 
-        allow(replica).to receive(:primary_key) { primary_key } # probably don't need this
+        allow(replica).to receive(:primary_key_columns) { primary_key_columns } # probably don't need this
         allow(replica).to receive(:row_count) { row_count }
 
         expect(master).to receive(:chunk_checksum).at_least(3).times do |table_name, opts|
           [ChunkChecksum.new(table_name: table_name,
-            crc32: crc32,
-            min: min_row_id,
-            max: max_row_id,
-            count: row_count,
-            primary_key: primary_key)]
+                             crc32: crc32,
+                             min: min_row_id,
+                             max: max_row_id,
+                             count: row_count,
+                             primary_key_columns: primary_key_columns)]
         end
 
         expect(replica).to receive(:chunk_checksum).at_least(3).times do |table_name, opts|
           [ChunkChecksum.new(table_name: table_name,
-            crc32: crc32,
-            min: min_row_id,
-            max: max_row_id,
-            count: row_count,
-            primary_key: primary_key)]
+                             crc32: crc32,
+                             min: min_row_id,
+                             max: max_row_id,
+                             count: row_count,
+                             primary_key_columns: primary_key_columns)]
         end
         subject.reconcile
       end

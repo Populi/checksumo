@@ -46,7 +46,7 @@ describe MysqlConnection do
     it { should respond_to(:check) }
     it { should respond_to(:search) }
     it { should respond_to(:row_checksum) }
-    it { should respond_to(:primary_key) }
+    it { should respond_to(:primary_key_columns) }
     it { should respond_to(:max_row_id) }
     it { should respond_to(:min_row_id) }
     it { should respond_to(:database_name) }
@@ -172,7 +172,7 @@ describe MysqlConnection do
       expect(statement).to receive(:execute) { result }
       expect(result).to receive(:map) { ["id"] }
 
-      expect(subject.primary_key("addresses")).to eq("id")
+      expect(subject.primary_key_columns("addresses")).to eq("id")
     end
   end
 

@@ -123,7 +123,7 @@ class ReplicationWatcher
     diff.each do |cc|
       @logger.debug("found chunk_checksum diff in delta: #{cc.inspect}")
 
-      puts "diff found on table #{cc.table_name} where #{cc.table_name}.#{cc.primary_key} between '#{cc.visible_min_row}' and '#{cc.visible_min_row}'"
+      puts "diff found on table #{cc.table_name} where #{cc.table_name}.#{cc.primary_key_columns} between '#{cc.visible_min_row}' and '#{cc.visible_min_row}'"
     end
   end
 

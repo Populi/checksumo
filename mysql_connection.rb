@@ -124,7 +124,7 @@ class MysqlConnection
       raise "Cannot create a Primary Key Strategy without a Table Name"
     end
 
-    primary_key = self.primary_key(table_name)
+    primary_key = self.primary_key_columns(table_name)
     if primary_key.match?(/(::)|(,\s*)/)
       logger.debug("creating multi-column primary key strategy for #{table_name}, primary key: #{primary_key}")
       MultiColumnPrimaryKey.new(column_name: primary_key, table_name: table_name)
@@ -178,7 +178,7 @@ class MysqlConnection
   end
   memoize :columns
 
-  def primary_key(table_name, _opts = {})
+  def primary_key_columns(table_name, _opts = {})
     @primary_key_cache.fetch(table_name) do |name|
       statement = primary_key_query
       result_set = @executor.execute {
@@ -192,7 +192,7 @@ class MysqlConnection
     end
   end
 
-  memoize :primary_key
+  memoize :primary_key_columns
 
   def max_row_id(table_name)
     qs = checksum_query_strategy(table_name: table_name)
@@ -236,7 +236,7 @@ class MysqlConnection
 
   def row_checksum(table_name, opts = {})
     row_id = opts.fetch(:row_id, nil)
-    primary_key = primary_key(table_name)
+    primary_key = primary_key_columns(table_name)
     statement = row_checksum_query(table_name)
     if !row_id.nil?
       result = @executor.execute { statement.execute(row_id, row_id) }
@@ -247,7 +247,7 @@ class MysqlConnection
     end
     result.map do |row|
       @logger.debug("RowChecksum row: #{row.inspect}")
-      RowChecksum.new(table_name: table_name, row_id: row["ROW_ID"], crc32: row["CHECKSUM"], primary_key: primary_key)
+      RowChecksum.new(table_name: table_name, row_id: row["ROW_ID"], crc32: row["CHECKSUM"], primary_key_columns: primary_key)
     end
   end
 
@@ -256,7 +256,7 @@ class MysqlConnection
     max = opts.fetch(:max) { max_row_id(table_name) }
     limit = opts.fetch(:limit, 0)
 
-    primary_key = primary_key(table_name)
+    primary_key = primary_key_columns(table_name)
 
     result = if limit.positive?
       chunk_checksum_unbounded(table_name, min, limit)
@@ -277,7 +277,7 @@ class MysqlConnection
         visible_max: row.fetch("VISIBLE_END") do
           row['END']
         end,
-        primary_key: primary_key
+        primary_key_columns: primary_key
       )
     end
   end
@@ -347,7 +347,7 @@ class MysqlConnection
   end
 
   def row_values(table_name, row_id)
-    primary_key = primary_key(table_name)
+    primary_key = primary_key_columns(table_name)
     statement = select_all_query(table_name)
 
     rows = []
