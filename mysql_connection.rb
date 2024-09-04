@@ -191,7 +191,8 @@ class MysqlConnection
       cols.join("::")
     end
   end
-  memoize :primary_key # ? this might not be worth memoizing
+
+  memoize :primary_key
 
   def max_row_id(table_name)
     qs = checksum_query_strategy(table_name: table_name)

@@ -85,7 +85,6 @@ end
 
 # Encapsulate per-table logic
 class Table
-  extend Memoist
   include LogHelper
 
   attr_accessor :conn, :primary_key_strategy
@@ -107,19 +106,13 @@ class Table
     @conn.max_row_id(@name)
   end
 
-  memoize :max_row_id
-
   def min_row_id
     @conn.min_row_id(@name)
   end
 
-  memoize :min_row_id
-
   def row_count
     @conn.row_count(@name)
   end
-
-  memoize :row_count
 
   def chunk_checksum(opts = {})
     @conn.chunk_checksum(@name, opts)
@@ -132,8 +125,6 @@ class Table
   def primary_key
     @conn.primary_key(@name)
   end
-
-  memoize :primary_key
 
   def row_values(row_id)
     @conn.row_values(@name, row_id)

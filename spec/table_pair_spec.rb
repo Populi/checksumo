@@ -91,7 +91,7 @@ describe "TablePair" do
       allow(mconn).to receive(:primary_key) { "id" }
 
       # should always be called
-      expect(mconn).to receive(:min_row_id) { "12" }
+      expect(mconn).to receive(:min_row_id).at_least(:once) { "12" }
       expect(mconn).to receive(:chunk_checksum) do |*args|
         opts = args.pop
         # This SHOULD be fixable within FactoryBot, but I haven't figured it out yet.
