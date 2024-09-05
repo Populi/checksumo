@@ -173,10 +173,16 @@ class TablePair
   def delta(opts = {})
     # First check the row count on either side
     row_count_diff = self.row_count_diff
+    @logger.debug("row_count_diff: #{row_count_diff.inspect}")
     @logger.info("row count mismatch: #{row_count_diff}") unless row_count_diff[:diff] == 0
 
+    row_mismatch = row_count_diff[:diff] != 0 ||
+      row_count_diff[:rmax] <=> row_count_diff[:mmax] ||
+      row_count_diff[:rmin] <=> row_count_diff[:mmin]
+    @logger.debug("row_mismatch: #{row_mismatch}, table_name: #{@table_name}")
+
     ccs = compare_chunks(opts)
-    if ccs.empty? and row_count_diff[:diff] == 0
+    if ccs.empty? and not row_mismatch
       @logger.debug("no chunk diff on #{@table_name}, skipping row diff")
       return Hash[]
     end
@@ -190,6 +196,20 @@ class TablePair
     # There are additional rows on the replica, probably with higher id values than the master has.
     if row_count_diff[:diff] < 0
       rd = compare_rows(min: @replica.min_row_id, max: @replica.max_row_id)
+      row_diff.merge! rd
+    end
+
+    # Replica min is "lower" than Master min, so we need a deletion
+    if (row_count_diff[:rmin] <=> row_count_diff[:mmin]) < 0
+      @logger.debug("mismatch between rmin/mmin")
+      rd = compare_rows(min: @replica.min_row_id, max: @master.min_row_id)
+      row_diff.merge! rd
+    end
+
+    # Replica max is "greater" than Master max, so we need a deletion
+    if (row_count_diff[:rmax] <=> row_count_diff[:mmax]) > 0
+      @logger.debug("mismatch between mmax/rmax ")
+      rd = compare_rows(min: @master.max_row_id, max: @replica.max_row_id)
       row_diff.merge! rd
     end
 
@@ -241,6 +261,7 @@ class TablePair
 
       @replica.chunk_checksum(min: mch.min, max: mch.max).each do |rch|
         @logger.debug("replica chunk: #{rch.inspect}")
+        @logger.debug("chunk counts: table => #{@table_name}, master => #{mch.count}, replica => #{rch.count}")
 
         next if rch.equal?(mch) # only keep checksums that are mismatched
         @logger.debug("chunk checksums misaligned on #{mch.inspect} and #{rch.inspect}")
@@ -312,11 +333,17 @@ class TablePair
     mrc = @master.row_count
     rrc = @replica.row_count
     diff = "#{mrc}".to_i - "#{ rrc }".to_i
+    @logger.debug("row counts: master => #{mrc}, replica => #{rrc}, diff => #{diff}")
+
     {
       table_name: @table_name,
       master: mrc,
       replica: rrc,
-      diff: diff
+      diff: diff,
+      mmax: @master.max_row_id,
+      mmin: @master.min_row_id,
+      rmax: @replica.max_row_id,
+      rmin: @replica.min_row_id
     }
   end
 

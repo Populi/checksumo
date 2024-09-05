@@ -257,7 +257,7 @@ class MysqlConnection
   end
 
   def generate_delete(table_name, row_id)
-    @logger.error("generate_delete table_name => #{table_name}; row_id => #{row_id}")
+    @logger.debug("generate_delete table_name => #{table_name}; row_id => #{row_id}")
     statement = select_all_raw_query(table_name, row_id)
     if @database_name
       table_name = "#{@database_name}.#{table_name}"

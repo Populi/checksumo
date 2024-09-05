@@ -135,6 +135,8 @@ describe ReplicationWatcher do
 
         allow(replica).to receive(:primary_key_columns) { primary_key_columns } # probably don't need this
         allow(replica).to receive(:row_count) { row_count }
+        allow(replica).to receive(:min_row_id) { min_row_id }
+        allow(replica).to receive(:max_row_id) { max_row_id }
 
         expect(master).to receive(:chunk_checksum).at_least(3).times do |table_name, opts|
           [ChunkChecksum.new(table_name: table_name,
@@ -333,6 +335,8 @@ describe ReplicationWatcher do
 
         allow(replica).to receive(:primary_key_columns) { primary_key_columns } # probably don't need this
         allow(replica).to receive(:row_count) { row_count }
+        allow(replica).to receive(:min_row_id) { min_row_id }
+        allow(replica).to receive(:max_row_id) { max_row_id }
 
         expect(master).to receive(:chunk_checksum).at_least(3).times do |table_name, opts|
           [ChunkChecksum.new(table_name: table_name,
