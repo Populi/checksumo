@@ -33,7 +33,7 @@ end
 
 # Encapsulate chunk comparison logic
 class ChunkComparison < AbstractComparison
-  attr_accessor :min_row, :max_row, :table_name, :visible_min_row, :visible_max_row
+  attr_accessor :min_row, :max_row, :table_name, :visible_min_row, :visible_max_row, :primary_key
 
   def initialize(opts = {})
     super
@@ -46,6 +46,7 @@ class ChunkComparison < AbstractComparison
       @min_row
     end
     @table_name = opts[:table_name]
+    @primary_key = opts[:primary_key]
   end
 
   def debug_info
@@ -57,7 +58,8 @@ class ChunkComparison < AbstractComparison
       visible_max_row: [master.visible_max, replica.visible_max],
       count: [master.count, replica.count],
       crc32: [master.crc32, replica.crc32],
-      mismatch: compare ? "false" : "true"
+      mismatch: compare ? "false" : "true",
+      primary_key: @primary_key
     }
   end
 end
@@ -270,7 +272,7 @@ class TablePair
           master: mch,
           replica: rch,
           table_name: mch.table_name,
-          primary_key_columns: primary_key,
+          primary_key: primary_key,
           min_row: mch.min,
           max_row: mch.max,
           visible_min_row: mch.visible_min,

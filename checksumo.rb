@@ -39,7 +39,7 @@ class Parser
       replica_password: ENV["DB_PASS"],
       verbose: :info,
       timeout: 10,
-      watch_mode: :CHUNK_SUMMARY,
+      watch_mode: :ROW_DIFF,
       wait_interval: 5,
       log_dir: "./logs"
     }
@@ -247,7 +247,13 @@ def main(args)
   watcher = setup(options)
   watcher.search if watcher.table_pairs.empty?
 
+  # Watch mode should be a symbol
   watch_mode = options[:watch_mode]
+  if watch_mode.is_a? String
+    watch_mode = watch_mode.to_sym
+    @logger.debug("coerced watch_mode to symbol")
+  end
+
   if watch_mode == :WAIT
     # wait to see if the tables become aligned
     watcher.watch(options)

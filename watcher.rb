@@ -122,8 +122,23 @@ class ReplicationWatcher
 
     diff.each do |cc|
       @logger.debug("found chunk_checksum diff in delta: #{cc.inspect}")
+      pk_cols = if cc.primary_key.is_a? MultiColumnPrimaryKey
+                  cc.primary_key.column_name.split(/::/)
+                else
+                  cc.primary_key.column_name
+                end
+      min_row = if cc.primary_key.is_a? MultiColumnPrimaryKey
+                  cc.visible_min_row.split(/::/)
+                else
+                  cc.visible_min_row
+                end
+      max_row = if cc.primary_key.is_a? MultiColumnPrimaryKey
+                  cc.visible_max_row.split(/::/)
+                else
+                  cc.visible_max_row
+                end
 
-      puts "diff found on table #{cc.table_name} where #{cc.table_name}.#{cc.primary_key_columns} between '#{cc.visible_min_row}' and '#{cc.visible_min_row}'"
+      puts "diff found on table #{cc.table_name} where #{pk_cols} between '#{min_row}' and '#{max_row}'"
     end
   end
 

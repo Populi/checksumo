@@ -5,7 +5,7 @@ defaults:
   replica_hostname: "127.0.0.1"
   replica_port: 3070
   verbose: info
-  watch_mode: CHUNK_SUMMARY
+  watch_mode: ROW_DIFF
   wait_interval: 5
   timeout: 15
   log_dir: "logs/"
